@@ -4,14 +4,47 @@
 #include <windows.h>
 #endif
 
+#include <iomanip>
+#include <ctime>
+
+static HWND s_hwnd;
+static bool s_isRunning;
+static float s_startTime;
+static float s_lastTime;
+static float s_timeElapsed;
+
 #ifdef _WIN32
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
-    if (msg == WM_DESTROY) {
-        PostQuitMessage(0);
-        return 0;
+    switch (msg)
+    {
+    case WM_SIZE:
+    {
+        break;
     }
-    return DefWindowProcA(hwnd, msg, wParam, lParam);
+
+    case WM_SETFOCUS:
+    {
+        break;
+    }
+
+    case WM_KILLFOCUS:
+    {
+        break;
+    }
+
+    case WM_DESTROY:
+    {
+        s_isRunning = false;
+        ::PostQuitMessage(0);
+        break;
+    }
+
+    default:
+        return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+    }
+
+    return 0;
 }
 #endif
 
@@ -19,50 +52,71 @@ int main()
 {
     std::cout << "Hello There !" << std::endl;
 
-#ifdef _WIN32
-    HINSTANCE hInstance = GetModuleHandleA(NULL);
+    s_startTime = static_cast<float>(clock());
 
-    WNDCLASSEXA wc{};
+#ifdef _WIN32
+    HINSTANCE hInstance = GetModuleHandleW(NULL);
+
+    WNDCLASSEXW wc{};
     wc.cbSize = sizeof(wc);
     wc.style = CS_HREDRAW | CS_VREDRAW;
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInstance;
-    wc.hCursor = LoadCursorA(NULL, IDC_ARROW);
+    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
     wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-    wc.lpszClassName = "TerrainWindowClass";
+    wc.lpszClassName = L"TerrainWindowClass";
 
-    if (!RegisterClassExA(&wc)) {
-        std::cerr << "RegisterClassExA failed (" << GetLastError() << ")\n";
+    if (!RegisterClassExW(&wc))
+    {
+        std::cerr << "RegisterClassExW failed (" << GetLastError() << ")\n";
         return 1;
     }
 
-    HWND hwnd = CreateWindowExA(
+    int width = 1920;
+    int height = 1080;
+
+    s_hwnd = CreateWindowExW(
         0,
         wc.lpszClassName,
-        "Terrain App",
+        L"Terrain App",
         WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT, 1920, 1080,
+        CW_USEDEFAULT, CW_USEDEFAULT, width, height,
         NULL, NULL, hInstance, NULL);
 
-    if (!hwnd) {
-        std::cerr << "CreateWindowExA failed (" << GetLastError() << ")\n";
+    if (!s_hwnd)
+    {
+        std::cerr << "CreateWindowExW failed (" << GetLastError() << ")\n";
         return 1;
     }
 
-    ShowWindow(hwnd, SW_SHOW);
-    UpdateWindow(hwnd);
+    ShowWindow(s_hwnd, SW_SHOW);
+    UpdateWindow(s_hwnd);
+    int centerX = width / 2;
+    int centerY = height / 2;
+    SetCursorPos(centerX, centerY);
 
-    MSG msg{};
-    while (GetMessageA(&msg, NULL, 0, 0) > 0) {
-        TranslateMessage(&msg);
-        DispatchMessageA(&msg);
+    s_isRunning = true;
+
+    while (s_isRunning)
+    {
+        float time = static_cast<float>(clock()) - s_startTime;
+        float dt = (time - s_lastTime) / 1000.0f;
+        s_lastTime = time;
+        s_timeElapsed += dt;
+
+        std::cout << "Time Elapsed : " << std::fixed << std::setprecision(1) << s_timeElapsed << "s" << std::endl;
+
+        MSG msg{};
+        while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE) > 0)
+        {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
     }
 
-    std::cout << "Window closed, exiting.\n";
-#else
-    std::cout << "This example creates a Win32 window; running on non-Windows platform.\n";
+    DestroyWindow(s_hwnd);
+
 #endif
 
-    std::cin.get();
     return 0;
 }
