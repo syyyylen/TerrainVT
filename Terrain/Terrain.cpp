@@ -13,6 +13,8 @@ static float s_startTime;
 static float s_lastTime;
 static float s_timeElapsed;
 
+// ---------------------------------------- Input Handling ----------------------------------------
+
 struct Vec2
 {
     Vec2() : x(0.0f), y(0.0f) {}
@@ -106,6 +108,8 @@ void UpdateInputs()
     }
 }
 
+// ---------------------------------------- Input Handling ----------------------------------------
+
 #ifdef _WIN32
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
@@ -148,6 +152,7 @@ int main()
     s_startTime = static_cast<float>(::clock());
 
 #ifdef _WIN32
+
     HINSTANCE hInstance = ::GetModuleHandleW(NULL);
 
     WNDCLASSEXW wc{};
