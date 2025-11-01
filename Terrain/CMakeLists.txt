@@ -1,5 +1,5 @@
 ﻿# Add source to this project's executable.
-add_executable (Terrain "Terrain.cpp" "Terrain.h")
+add_executable (Terrain "Main.cpp" "TerrainApp.h" "TerrainApp.cpp")
 
 # Include D3D12
 target_link_libraries(Terrain PUBLIC d3d12.lib d3dcompiler.lib dxcompiler.lib)
