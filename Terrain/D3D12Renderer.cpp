@@ -164,4 +164,118 @@ D3D12Renderer::D3D12Renderer(HWND hwnd, int width, int height)
 
 D3D12Renderer::~D3D12Renderer()
 {
+    /*for (int i = 0; i < FRAMES_IN_FLIGHT; ++i)
+    {
+        m_frameIndex = i;
+        WaitForPreviousFrame();
+    }*/
+
+    if (m_device)
+	    m_device->Release();
+
+    if (m_swapChain)
+	    m_swapChain->Release();
+
+    if (m_commandQueue)
+	    m_commandQueue->Release();
+
+    if (m_rtvDescriptorHeap)
+	    m_rtvDescriptorHeap->Release();
+
+    if (m_commandList)
+	    m_commandList->Release();
+
+    for (int i = 0; i < FRAMES_IN_FLIGHT; ++i)
+    {
+        if (m_renderTargets[i])
+            m_renderTargets[i]->Release();
+        
+        if (m_commandAllocators[i])
+            m_commandAllocators[i]->Release();
+
+        if (m_fences[i])
+            m_fences[i]->Release();
+    };
+}
+
+void D3D12Renderer::Render()
+{
+    WaitForPreviousFrame();
+
+    HRESULT hr;
+
+    hr = m_commandAllocators[m_frameIndex]->Reset();
+
+    if (FAILED(hr))
+    {
+        return;
+    }
+
+    hr = m_commandList->Reset(m_commandAllocators[m_frameIndex], nullptr);
+
+    if (FAILED(hr)) 
+    {
+        return;
+    }
+
+    CD3DX12_RESOURCE_BARRIER presentToRtTransition = CD3DX12_RESOURCE_BARRIER::Transition(m_renderTargets[m_frameIndex], D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+    m_commandList->ResourceBarrier(1, &presentToRtTransition);
+
+    CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), m_frameIndex, m_rtvDescriptorSize);
+
+    m_commandList->OMSetRenderTargets(1, &rtvHandle, false, nullptr);
+
+    const float clearColor[] = { 0.0f, 0.2f, 0.4f, 1.0f };
+    m_commandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
+
+    CD3DX12_RESOURCE_BARRIER rtToPresentTransition = CD3DX12_RESOURCE_BARRIER::Transition(m_renderTargets[m_frameIndex], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
+
+    m_commandList->ResourceBarrier(1, &rtToPresentTransition);
+
+    hr = m_commandList->Close();
+
+    if (FAILED(hr))
+    {
+        return;
+    }
+
+    ID3D12CommandList* ppCommandLists[] = { m_commandList };
+
+    m_commandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
+
+    hr = m_commandQueue->Signal(m_fences[m_frameIndex], m_fenceValues[m_frameIndex]);
+
+    if (FAILED(hr))
+    {
+        return;
+    }
+
+    hr = m_swapChain->Present(0, 0);
+
+    if (FAILED(hr))
+    {
+        return;
+    }
+}
+
+void D3D12Renderer::WaitForPreviousFrame()
+{
+    HRESULT hr;
+
+    m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
+
+    if (m_fences[m_frameIndex]->GetCompletedValue() < m_fenceValues[m_frameIndex])
+    {
+        hr = m_fences[m_frameIndex]->SetEventOnCompletion(m_fenceValues[m_frameIndex], m_fenceEvent);
+
+        if (FAILED(hr))
+        {
+            return;
+        }
+
+        WaitForSingleObject(m_fenceEvent, INFINITE);
+    }
+
+    m_fenceValues[m_frameIndex]++;
 }

@@ -12,9 +12,13 @@ public:
 	D3D12Renderer(HWND hwnd, int width, int height);
 	~D3D12Renderer();
 
+	void Render();
+
 private:
+	void WaitForPreviousFrame();
+
 	ID3D12Device* m_device = nullptr;
-	IDXGISwapChain3* m_swapChain;
+	IDXGISwapChain3* m_swapChain = nullptr;
 	ID3D12CommandQueue* m_commandQueue = nullptr;
 	ID3D12DescriptorHeap* m_rtvDescriptorHeap = nullptr;
 	ID3D12Resource* m_renderTargets[FRAMES_IN_FLIGHT] = {};

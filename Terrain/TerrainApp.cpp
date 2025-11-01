@@ -102,6 +102,8 @@ void TerrainApp::Run()
 			::TranslateMessage(&msg);
 			::DispatchMessageW(&msg);
 		}
+
+		m_renderer->Render();
 	}
 }
 
