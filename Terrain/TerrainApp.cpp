@@ -73,7 +73,7 @@ TerrainApp::TerrainApp()
 	int centerY = height / 2;
 	::SetCursorPos(centerX, centerY);
 
-	m_renderer = std::make_unique<D3D12Renderer>();
+	m_renderer = std::make_unique<D3D12Renderer>(m_hwnd, width, height);
 
 	m_isRunning = true;
 }
