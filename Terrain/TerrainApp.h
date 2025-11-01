@@ -5,6 +5,8 @@
 #include <iomanip>
 #include <ctime>
 
+#include "D3D12Renderer.h"
+
 class TerrainApp 
 {
 public:
@@ -33,15 +35,17 @@ private:
 	void OnRightMouseUp(Vec2 pos);
 	void UpdateInputs();
 
-	bool s_isMouseLocked = true;
-	unsigned char s_keys_state[256] = {};
-	unsigned char s_old_keys_state[256] = {};
-	Vec2 s_old_mouse_pos = {};
-	bool s_first_time = true;
+	bool m_isMouseLocked = false;
+	unsigned char m_keys_state[256] = {};
+	unsigned char m_old_keys_state[256] = {};
+	Vec2 m_old_mouse_pos = {};
+	bool m_first_time = true;
 
-	HWND m_hwnd;
-	bool m_isRunning;
-	float m_startTime;
-	float m_lastTime;
-	float m_timeElapsed;
+	HWND m_hwnd = nullptr;
+	bool m_isRunning = false;
+	float m_startTime = 0.0f;
+	float m_lastTime = 0.0f;
+	float m_timeElapsed = 0.0f;
+
+	std::unique_ptr<D3D12Renderer> m_renderer = nullptr;
 };

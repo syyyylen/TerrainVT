@@ -68,17 +68,20 @@ TerrainApp::TerrainApp()
 
 	::ShowWindow(m_hwnd, SW_SHOW);
 	::UpdateWindow(m_hwnd);
-	::ShowCursor(true);
+	::ShowCursor(!m_isMouseLocked);
 	int centerX = width / 2;
 	int centerY = height / 2;
 	::SetCursorPos(centerX, centerY);
 
-	m_isRunning = true;
+	m_renderer = std::make_unique<D3D12Renderer>();
 
+	m_isRunning = true;
 }
 
 TerrainApp::~TerrainApp()
 {
+	m_renderer.reset();
+
 	::DestroyWindow(m_hwnd);
 }
 
@@ -109,7 +112,7 @@ void TerrainApp::Quit()
 
 void TerrainApp::OnMouseMove(Vec2 pos)
 {
-	if (!s_isMouseLocked)
+	if (!m_isMouseLocked)
 		return;
 }
 
@@ -119,8 +122,8 @@ void TerrainApp::OnKeyUp(int key)
 {
 	if (key == 'E')
 	{
-		s_isMouseLocked = s_isMouseLocked ? false : true;
-		::ShowCursor(!s_isMouseLocked);
+		m_isMouseLocked = m_isMouseLocked ? false : true;
+		::ShowCursor(!m_isMouseLocked);
 		RECT rc;
 		::GetClientRect(m_hwnd, &rc);
 		::SetCursorPos((rc.right - rc.left) / 2.0f, (rc.bottom - rc.top) / 2.0f);
@@ -137,33 +140,33 @@ void TerrainApp::UpdateInputs()
 	POINT current_mouse_pos = {};
 	::GetCursorPos(&current_mouse_pos);
 
-	if (s_first_time)
+	if (m_first_time)
 	{
-		s_old_mouse_pos = Vec2(current_mouse_pos.x, current_mouse_pos.y);
-		s_first_time = false;
+		m_old_mouse_pos = Vec2(current_mouse_pos.x, current_mouse_pos.y);
+		m_first_time = false;
 	}
 
-	if (current_mouse_pos.x != s_old_mouse_pos.x || current_mouse_pos.y != s_old_mouse_pos.y)
+	if (current_mouse_pos.x != m_old_mouse_pos.x || current_mouse_pos.y != m_old_mouse_pos.y)
 	{
 		OnMouseMove(Vec2(current_mouse_pos.x, current_mouse_pos.y));
 	}
 
-	s_old_mouse_pos = Vec2(current_mouse_pos.x, current_mouse_pos.y);
+	m_old_mouse_pos = Vec2(current_mouse_pos.x, current_mouse_pos.y);
 
-	if (::GetKeyboardState(s_keys_state))
+	if (::GetKeyboardState(m_keys_state))
 	{
 		for (unsigned int i = 0; i < 256; i++)
 		{
-			if (s_keys_state[i] & 0x80)
+			if (m_keys_state[i] & 0x80)
 			{
 				if (i == VK_LBUTTON)
 				{
-					if (s_keys_state[i] != s_old_keys_state[i])
+					if (m_keys_state[i] != m_old_keys_state[i])
 						OnLeftMouseDown(Vec2(current_mouse_pos.x, current_mouse_pos.y));
 				}
 				else if (i == VK_RBUTTON)
 				{
-					if (s_keys_state[i] != s_old_keys_state[i])
+					if (m_keys_state[i] != m_old_keys_state[i])
 						OnRightMouseDown(Vec2(current_mouse_pos.x, current_mouse_pos.y));
 				}
 				else
@@ -171,7 +174,7 @@ void TerrainApp::UpdateInputs()
 			}
 			else
 			{
-				if (s_keys_state[i] != s_old_keys_state[i])
+				if (m_keys_state[i] != m_old_keys_state[i])
 				{
 					if (i == VK_LBUTTON)
 						OnLeftMouseUp(Vec2(current_mouse_pos.x, current_mouse_pos.y));
@@ -183,6 +186,6 @@ void TerrainApp::UpdateInputs()
 
 			}
 		}
-		::memcpy(s_old_keys_state, s_keys_state, sizeof(unsigned char) * 256);
+		::memcpy(m_old_keys_state, m_keys_state, sizeof(unsigned char) * 256);
 	}
 }

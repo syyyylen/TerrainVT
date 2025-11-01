@@ -1,0 +1,27 @@
+#pragma once
+
+#include <d3d12.h>
+#include <dxgi1_4.h>
+
+#define FRAMES_IN_FLIGHT 3
+
+class D3D12Renderer
+{
+public:
+	D3D12Renderer();
+	~D3D12Renderer();
+
+private:
+	ID3D12Device* m_device = nullptr;
+	IDXGISwapChain3* m_swapChain;
+	ID3D12CommandQueue* m_commandQueue = nullptr;
+	ID3D12DescriptorHeap* m_rtvHeap = nullptr;
+	ID3D12Resource* m_renderTargets[FRAMES_IN_FLIGHT] = {};
+	ID3D12CommandAllocator* m_commandAllocators[FRAMES_IN_FLIGHT] = {};
+	ID3D12GraphicsCommandList* m_commandList = nullptr;
+	ID3D12Fence* m_fence = nullptr;
+	HANDLE m_fenceEvent = nullptr;
+	UINT64 m_fenceValues[FRAMES_IN_FLIGHT] = {};
+	int m_frameIndex = 0;
+	int m_rtvDescriptorSize = 0;
+};

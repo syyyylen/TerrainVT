@@ -9,5 +9,7 @@ int main()
         app.Run();
     }
 
+    std::cout << "Exiting Terrain App" << std::endl;
+
     return 0;
 }
