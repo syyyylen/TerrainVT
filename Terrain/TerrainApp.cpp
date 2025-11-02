@@ -321,9 +321,15 @@ TerrainApp::TerrainApp()
 	}
 
 	Vertex vList[] = {
-		{ { 0.0f, 0.5f, 0.5f } },
-		{ { 0.5f, -0.5f, 0.5f } },
+		{ { -0.5f,  0.5f, 0.5f } },
+		{ {  0.5f, -0.5f, 0.5f } },
 		{ { -0.5f, -0.5f, 0.5f } },
+		{ {  0.5f,  0.5f, 0.5f } }
+	};
+
+	DWORD iList[] = {
+		0, 1, 2,
+		0, 3, 1
 	};
 
 	int vBufferSize = sizeof(vList);
@@ -365,6 +371,44 @@ TerrainApp::TerrainApp()
 	CD3DX12_RESOURCE_BARRIER copyToVsBarrier = CD3DX12_RESOURCE_BARRIER::Transition(m_vertexBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
 
 	m_commandList->ResourceBarrier(1, &copyToVsBarrier);
+
+	int iBufferSize = sizeof(iList);
+
+	CD3DX12_RESOURCE_DESC descIndexBufferSize = CD3DX12_RESOURCE_DESC::Buffer(iBufferSize);
+
+	m_device->CreateCommittedResource(
+		&heapPropDefault,
+		D3D12_HEAP_FLAG_NONE,
+		&descIndexBufferSize,
+		D3D12_RESOURCE_STATE_COPY_DEST,
+		nullptr,
+		IID_PPV_ARGS(&m_indexBuffer));
+
+	m_vertexBuffer->SetName(L"Index Buffer Resource Heap");
+
+	ID3D12Resource* iBufferUploadHeap;
+	m_device->CreateCommittedResource(
+		&heapPropUpload,
+		D3D12_HEAP_FLAG_NONE,
+		&descIndexBufferSize,
+		D3D12_RESOURCE_STATE_GENERIC_READ,
+		nullptr,
+		IID_PPV_ARGS(&iBufferUploadHeap));
+
+	vBufferUploadHeap->SetName(L"Index Buffer Upload Resource Heap");
+
+	D3D12_SUBRESOURCE_DATA indexData = {};
+	indexData.pData = reinterpret_cast<BYTE*>(iList);
+	indexData.RowPitch = iBufferSize;
+	indexData.SlicePitch = iBufferSize;
+
+	UpdateSubresources(m_commandList, m_indexBuffer, iBufferUploadHeap, 0, 0, 1, &indexData);
+
+	m_commandList->ResourceBarrier(1, &copyToVsBarrier);
+
+	m_indexBufferView.BufferLocation = m_indexBuffer->GetGPUVirtualAddress();
+	m_indexBufferView.Format = DXGI_FORMAT_R32_UINT;
+	m_indexBufferView.SizeInBytes = iBufferSize;
 
 	m_commandList->Close();
 	ID3D12CommandList* ppCommandLists[] = { m_commandList };
@@ -480,8 +524,9 @@ void TerrainApp::Run()
 		m_commandList->RSSetViewports(1, &m_viewport);
 		m_commandList->RSSetScissorRects(1, &m_scissorRect);
 		m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		m_commandList->IASetIndexBuffer(&m_indexBufferView);
 		m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
-		m_commandList->DrawInstanced(3, 1, 0, 0);
+		m_commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
 
 		CD3DX12_RESOURCE_BARRIER rtToPresentTransition = CD3DX12_RESOURCE_BARRIER::Transition(m_renderTargets[m_frameIndex], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
 
