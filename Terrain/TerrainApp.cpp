@@ -137,9 +137,12 @@ TerrainApp::TerrainApp()
 		return;
 	}
 
+	DXGI_SAMPLE_DESC sampleDesc = {};
+	sampleDesc.Count = 1;
+
 	DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
 	swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	swapChainDesc.SampleDesc.Count = 1;
+	swapChainDesc.SampleDesc = sampleDesc;
 	swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 	swapChainDesc.BufferCount = FRAMES_IN_FLIGHT;
 	swapChainDesc.Scaling = DXGI_SCALING_NONE;
@@ -207,8 +210,6 @@ TerrainApp::TerrainApp()
 		return;
 	}
 
-	m_commandList->Close();
-
 	for (int i = 0; i < FRAMES_IN_FLIGHT; i++)
 	{
 		hr = m_device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_fences[i]));
@@ -227,6 +228,171 @@ TerrainApp::TerrainApp()
 	{
 		return;
 	}
+
+	CD3DX12_ROOT_SIGNATURE_DESC rootSignatureDesc;
+	rootSignatureDesc.Init(0, nullptr, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+
+	ID3DBlob* signature;
+	hr = D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signature, nullptr);
+
+	if (FAILED(hr))
+	{
+		return;
+	}
+
+	hr = m_device->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&m_rootSignature));
+
+	if (FAILED(hr))
+	{
+		return;
+	}
+
+	ID3DBlob* vertexShader;
+	ID3DBlob* errorBuff;
+	hr = D3DCompileFromFile(L"Shaders/Vertex.hlsl",
+		nullptr,
+		nullptr,
+		"main",
+		"vs_5_0",
+		D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION,
+		0,
+		&vertexShader,
+		&errorBuff);
+
+	if (FAILED(hr))
+	{
+		OutputDebugStringA((char*)errorBuff->GetBufferPointer());
+		return;
+	}
+
+	D3D12_SHADER_BYTECODE vertexShaderBytecode = {};
+	vertexShaderBytecode.BytecodeLength = vertexShader->GetBufferSize();
+	vertexShaderBytecode.pShaderBytecode = vertexShader->GetBufferPointer();
+
+	ID3DBlob* pixelShader;
+	hr = D3DCompileFromFile(L"Shaders/Pixel.hlsl",
+		nullptr,
+		nullptr,
+		"main",
+		"ps_5_0",
+		D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION,
+		0,
+		&pixelShader,
+		&errorBuff);
+
+	if (FAILED(hr))
+	{
+		OutputDebugStringA((char*)errorBuff->GetBufferPointer());
+		return;
+	}
+
+	D3D12_SHADER_BYTECODE pixelShaderBytecode = {};
+	pixelShaderBytecode.BytecodeLength = pixelShader->GetBufferSize();
+	pixelShaderBytecode.pShaderBytecode = pixelShader->GetBufferPointer();
+
+	D3D12_INPUT_ELEMENT_DESC inputLayout[] =
+	{
+		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
+	};
+
+	D3D12_INPUT_LAYOUT_DESC inputLayoutDesc = {};
+
+	inputLayoutDesc.NumElements = sizeof(inputLayout) / sizeof(D3D12_INPUT_ELEMENT_DESC);
+	inputLayoutDesc.pInputElementDescs = inputLayout;
+
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
+	psoDesc.InputLayout = inputLayoutDesc;
+	psoDesc.pRootSignature = m_rootSignature;
+	psoDesc.VS = vertexShaderBytecode;
+	psoDesc.PS = pixelShaderBytecode;
+	psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+	psoDesc.SampleDesc = sampleDesc;
+	psoDesc.SampleMask = 0xffffffff;
+	psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+	psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+	psoDesc.NumRenderTargets = 1;
+
+	hr = m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pipelineStateObject));
+
+	if (FAILED(hr))
+	{
+		return;
+	}
+
+	Vertex vList[] = {
+		{ { 0.0f, 0.5f, 0.5f } },
+		{ { 0.5f, -0.5f, 0.5f } },
+		{ { -0.5f, -0.5f, 0.5f } },
+	};
+
+	int vBufferSize = sizeof(vList);
+
+	CD3DX12_RESOURCE_DESC descBufferSize = CD3DX12_RESOURCE_DESC::Buffer(vBufferSize);
+
+	CD3DX12_HEAP_PROPERTIES heapPropDefault(D3D12_HEAP_TYPE_DEFAULT);
+
+	m_device->CreateCommittedResource(
+		&heapPropDefault,
+		D3D12_HEAP_FLAG_NONE,
+		&descBufferSize,
+		D3D12_RESOURCE_STATE_COPY_DEST,
+		nullptr,
+		IID_PPV_ARGS(&m_vertexBuffer));
+
+	m_vertexBuffer->SetName(L"Vertex Buffer Resource Heap");
+
+	CD3DX12_HEAP_PROPERTIES heapPropUpload = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
+
+	ID3D12Resource* vBufferUploadHeap;
+	m_device->CreateCommittedResource(
+		&heapPropUpload,
+		D3D12_HEAP_FLAG_NONE,
+		&descBufferSize,
+		D3D12_RESOURCE_STATE_GENERIC_READ,
+		nullptr,
+		IID_PPV_ARGS(&vBufferUploadHeap));
+
+	vBufferUploadHeap->SetName(L"Vertex Buffer Upload Resource Heap");
+
+	D3D12_SUBRESOURCE_DATA vertexData = {};
+	vertexData.pData = reinterpret_cast<BYTE*>(vList);
+	vertexData.RowPitch = vBufferSize;
+	vertexData.SlicePitch = vBufferSize;
+
+	UpdateSubresources(m_commandList, m_vertexBuffer, vBufferUploadHeap, 0, 0, 1, &vertexData);
+
+	CD3DX12_RESOURCE_BARRIER copyToVsBarrier = CD3DX12_RESOURCE_BARRIER::Transition(m_vertexBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
+
+	m_commandList->ResourceBarrier(1, &copyToVsBarrier);
+
+	m_commandList->Close();
+	ID3D12CommandList* ppCommandLists[] = { m_commandList };
+	m_commandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
+
+	m_fenceValues[m_frameIndex]++;
+	hr = m_commandQueue->Signal(m_fences[m_frameIndex], m_fenceValues[m_frameIndex]);
+
+	if (FAILED(hr))
+	{
+		return;
+	}
+
+	m_vertexBufferView.BufferLocation = m_vertexBuffer->GetGPUVirtualAddress();
+	m_vertexBufferView.StrideInBytes = sizeof(Vertex);
+	m_vertexBufferView.SizeInBytes = vBufferSize;
+
+	m_viewport.TopLeftX = 0;
+	m_viewport.TopLeftY = 0;
+	m_viewport.Width = width;
+	m_viewport.Height = height;
+	m_viewport.MinDepth = 0.0f;
+	m_viewport.MaxDepth = 1.0f;
+
+	m_scissorRect.left = 0;
+	m_scissorRect.top = 0;
+	m_scissorRect.right = width;
+	m_scissorRect.bottom = height;
 
 	m_isRunning = true;
 }
@@ -292,7 +458,7 @@ void TerrainApp::Run()
 			return;
 		}
 
-		hr = m_commandList->Reset(m_commandAllocators[m_frameIndex], nullptr);
+		hr = m_commandList->Reset(m_commandAllocators[m_frameIndex], m_pipelineStateObject);
 
 		if (FAILED(hr))
 		{
@@ -309,6 +475,13 @@ void TerrainApp::Run()
 
 		const float clearColor[] = { 0.0f, 0.2f, 0.4f, 1.0f };
 		m_commandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
+
+		m_commandList->SetGraphicsRootSignature(m_rootSignature);
+		m_commandList->RSSetViewports(1, &m_viewport);
+		m_commandList->RSSetScissorRects(1, &m_scissorRect);
+		m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
+		m_commandList->DrawInstanced(3, 1, 0, 0);
 
 		CD3DX12_RESOURCE_BARRIER rtToPresentTransition = CD3DX12_RESOURCE_BARRIER::Transition(m_renderTargets[m_frameIndex], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
 

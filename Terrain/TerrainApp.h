@@ -7,6 +7,8 @@
 
 #include <d3d12.h>
 #include <dxgi1_4.h>
+#include <DirectXMath.h>
+#include <d3dcompiler.h>
 #include "Include/d3dx12.h"
 
 #define FRAMES_IN_FLIGHT 3
@@ -24,6 +26,10 @@ public:
 private:
 
 	void WaitForPreviousFrame();
+
+	struct Vertex {
+		DirectX::XMFLOAT3 pos;
+	};
 
 	struct Vec2
 	{
@@ -65,4 +71,10 @@ private:
 	UINT64 m_fenceValues[FRAMES_IN_FLIGHT] = {};
 	int m_frameIndex = 0;
 	int m_rtvDescriptorSize = 0;
+	ID3D12PipelineState* m_pipelineStateObject;
+	ID3D12RootSignature* m_rootSignature;
+	D3D12_VIEWPORT m_viewport;
+	D3D12_RECT m_scissorRect;
+	ID3D12Resource* m_vertexBuffer;
+	D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView;
 };
