@@ -79,4 +79,6 @@ private:
 	D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView;
 	ID3D12Resource* m_indexBuffer;
 	D3D12_INDEX_BUFFER_VIEW m_indexBufferView;
+	ID3D12Resource* m_depthStencilBuffer;
+	ID3D12DescriptorHeap* m_dsDescriptorHeap;
 };
