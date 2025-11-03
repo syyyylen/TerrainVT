@@ -10,6 +10,7 @@
 #include <DirectXMath.h>
 #include <d3dcompiler.h>
 #include "Include/d3dx12.h"
+#include "Camera.h"
 
 #define FRAMES_IN_FLIGHT 3
 
@@ -28,8 +29,7 @@ private:
 	void WaitForPreviousFrame();
 
 	struct ConstantBuffer {
-		DirectX::XMFLOAT3 color;
-		float padding;
+		DirectX::XMFLOAT4X4 viewProj;
 	};
 
 	struct Vertex {
@@ -52,10 +52,10 @@ private:
 	void OnRightMouseUp(Vec2 pos);
 	void UpdateInputs();
 
-	bool m_isMouseLocked = false;
+	bool m_isMouseLocked = true;
 	unsigned char m_keys_state[256] = {};
 	unsigned char m_old_keys_state[256] = {};
-	Vec2 m_old_mouse_pos = {};
+	Vec2 m_lastMousePos = {};
 	bool m_first_time = true;
 
 	HWND m_hwnd = nullptr;
@@ -63,6 +63,11 @@ private:
 	float m_startTime = 0.0f;
 	float m_lastTime = 0.0f;
 	float m_timeElapsed = 0.0f;
+
+	Camera m_camera = {};
+	float m_cameraForward = 0.0f;
+	float m_cameraRight = 0.0f;
+	float m_cameraMoveSpeed = 8.0f;
 
 	ID3D12Device* m_device = nullptr;
 	IDXGISwapChain3* m_swapChain = nullptr;
@@ -76,18 +81,18 @@ private:
 	UINT64 m_fenceValues[FRAMES_IN_FLIGHT] = {};
 	int m_frameIndex = 0;
 	int m_rtvDescriptorSize = 0;
-	ID3D12PipelineState* m_pipelineStateObject;
-	ID3D12RootSignature* m_rootSignature;
-	D3D12_VIEWPORT m_viewport;
-	D3D12_RECT m_scissorRect;
-	ID3D12Resource* m_vertexBuffer;
-	D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView;
-	ID3D12Resource* m_indexBuffer;
-	D3D12_INDEX_BUFFER_VIEW m_indexBufferView;
-	ID3D12Resource* m_depthStencilBuffer;
-	ID3D12DescriptorHeap* m_dsDescriptorHeap;
-	ID3D12DescriptorHeap* m_mainDescriptorHeap[FRAMES_IN_FLIGHT];
-	ID3D12Resource* m_constantBufferUploadHeap[FRAMES_IN_FLIGHT];
-	ConstantBuffer m_constantBuffer;
-	UINT8* m_constantBufferGPUAddress[FRAMES_IN_FLIGHT];
+	ID3D12PipelineState* m_pipelineStateObject = nullptr;
+	ID3D12RootSignature* m_rootSignature = nullptr;
+	D3D12_VIEWPORT m_viewport = {};
+	D3D12_RECT m_scissorRect = {};
+	ID3D12Resource* m_vertexBuffer = nullptr;
+	D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView = {};
+	ID3D12Resource* m_indexBuffer = nullptr;
+	D3D12_INDEX_BUFFER_VIEW m_indexBufferView = {};
+	ID3D12Resource* m_depthStencilBuffer = nullptr;
+	ID3D12DescriptorHeap* m_dsDescriptorHeap = nullptr;
+	ID3D12DescriptorHeap* m_mainDescriptorHeap[FRAMES_IN_FLIGHT] = {};
+	ID3D12Resource* m_constantBufferUploadHeap[FRAMES_IN_FLIGHT] = {};
+	ConstantBuffer m_constantBuffer = {};
+	UINT8* m_constantBufferGPUAddress[FRAMES_IN_FLIGHT] = {};
 };

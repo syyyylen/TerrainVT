@@ -8,6 +8,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	{
 	case WM_SIZE:
 	{
+		// TODO resize rtv
+		// TODO update camera perspective FOV
 		break;
 	}
 
@@ -68,7 +70,7 @@ TerrainApp::TerrainApp()
 
 	::ShowWindow(m_hwnd, SW_SHOW);
 	::UpdateWindow(m_hwnd);
-	::ShowCursor(!m_isMouseLocked);
+	::ShowCursor(false);
 	int centerX = width / 2;
 	int centerY = height / 2;
 	::SetCursorPos(centerX, centerY);
@@ -332,7 +334,7 @@ TerrainApp::TerrainApp()
 	D3D12_ROOT_PARAMETER  rootParameters[1];
 	rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
 	rootParameters[0].DescriptorTable = descriptorTable;
-	rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+	rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
 
 	CD3DX12_ROOT_SIGNATURE_DESC rootSignatureDesc;
 	rootSignatureDesc.Init(_countof(rootParameters), rootParameters, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
@@ -427,15 +429,15 @@ TerrainApp::TerrainApp()
 	}
 
 	Vertex vList[] = {
-		{ { -0.5f,  0.5f, 0.5f } },
-		{ {  0.5f, -0.5f, 0.5f } },
-		{ { -0.5f, -0.5f, 0.5f } },
-		{ {  0.5f,  0.5f, 0.5f } }
+		{ { -10.0f,  0.0f, -10.0f } },
+		{ {  10.0f, 0.0f, -10.0f } },
+		{ { 10.0f, 0.0f, 10.0f } },
+		{ {  -10.0f,  0.0f, 10.0f } }
 	};
 
 	DWORD iList[] = {
-		0, 1, 2,
-		0, 3, 1
+		0, 2, 1,
+		0, 3, 2
 	};
 
 	int vBufferSize = sizeof(vList);
@@ -542,6 +544,9 @@ TerrainApp::TerrainApp()
 	m_scissorRect.right = width;
 	m_scissorRect.bottom = height;
 
+	m_camera.SetPosition({ 0.0f, 3.0f, -5.0f });
+	m_camera.UpdatePerspectiveFOV(0.35f * 3.14159f, (float)width / (float)height);
+
 	m_isRunning = true;
 }
 
@@ -601,9 +606,18 @@ void TerrainApp::Run()
 			::DispatchMessageW(&msg);
 		}
 
+		m_camera.Walk(m_cameraForward * dt * m_cameraMoveSpeed);
+		m_camera.Strafe(m_cameraRight * dt * m_cameraMoveSpeed);
+
+		m_camera.UpdateViewMatrix();
+
 		WaitForPreviousFrame();
 
-		m_constantBuffer.color = DirectX::XMFLOAT3(1.0f, 0.5f * (sinf(m_timeElapsed) + 1.0f), 0.0f);
+		DirectX::XMMATRIX view = m_camera.GetViewMatrix();
+		DirectX::XMMATRIX proj = m_camera.GetProjMatrix();
+		DirectX::XMMATRIX viewProj = view * proj;
+
+		DirectX::XMStoreFloat4x4(&m_constantBuffer.viewProj, viewProj);
 		memcpy(m_constantBufferGPUAddress[m_frameIndex], &m_constantBuffer, sizeof(m_constantBuffer));
 
 		HRESULT hr;
@@ -710,12 +724,33 @@ void TerrainApp::OnMouseMove(Vec2 pos)
 {
 	if (!m_isMouseLocked)
 		return;
+
+	float dx = DirectX::XMConvertToRadians(0.25f * (pos.x - m_lastMousePos.x));
+	float dy = DirectX::XMConvertToRadians(0.25f * (pos.y - m_lastMousePos.y));
+
+	m_camera.Pitch(dy);
+	m_camera.RotateY(dx);
+
+	m_lastMousePos.x = pos.x;
+	m_lastMousePos.y = pos.y;
 }
 
-void TerrainApp::OnKeyDown(int key) {}
+void TerrainApp::OnKeyDown(int key) 
+{
+	if (key == 'Z')
+		m_cameraForward = 1.0f;
+	else if (key == 'S')
+		m_cameraForward = -1.0f;
+	else if (key == 'Q')
+		m_cameraRight = -1.0f;
+	else if (key == 'D')
+		m_cameraRight = 1.0f;
+}
 
 void TerrainApp::OnKeyUp(int key)
 {
+	m_cameraForward = 0.0f;
+	m_cameraRight = 0.0f;
 	if (key == 'E')
 	{
 		m_isMouseLocked = m_isMouseLocked ? false : true;
@@ -738,16 +773,16 @@ void TerrainApp::UpdateInputs()
 
 	if (m_first_time)
 	{
-		m_old_mouse_pos = Vec2(current_mouse_pos.x, current_mouse_pos.y);
+		m_lastMousePos = Vec2(current_mouse_pos.x, current_mouse_pos.y);
 		m_first_time = false;
 	}
 
-	if (current_mouse_pos.x != m_old_mouse_pos.x || current_mouse_pos.y != m_old_mouse_pos.y)
+	if (current_mouse_pos.x != m_lastMousePos.x || current_mouse_pos.y != m_lastMousePos.y)
 	{
 		OnMouseMove(Vec2(current_mouse_pos.x, current_mouse_pos.y));
 	}
 
-	m_old_mouse_pos = Vec2(current_mouse_pos.x, current_mouse_pos.y);
+	m_lastMousePos = Vec2(current_mouse_pos.x, current_mouse_pos.y);
 
 	if (::GetKeyboardState(m_keys_state))
 	{
