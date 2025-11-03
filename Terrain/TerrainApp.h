@@ -27,6 +27,11 @@ private:
 
 	void WaitForPreviousFrame();
 
+	struct ConstantBuffer {
+		DirectX::XMFLOAT3 color;
+		float padding;
+	};
+
 	struct Vertex {
 		DirectX::XMFLOAT3 pos;
 	};
@@ -81,4 +86,8 @@ private:
 	D3D12_INDEX_BUFFER_VIEW m_indexBufferView;
 	ID3D12Resource* m_depthStencilBuffer;
 	ID3D12DescriptorHeap* m_dsDescriptorHeap;
+	ID3D12DescriptorHeap* m_mainDescriptorHeap[FRAMES_IN_FLIGHT];
+	ID3D12Resource* m_constantBufferUploadHeap[FRAMES_IN_FLIGHT];
+	ConstantBuffer m_constantBuffer;
+	UINT8* m_constantBufferGPUAddress[FRAMES_IN_FLIGHT];
 };
