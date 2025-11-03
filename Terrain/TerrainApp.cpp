@@ -1,4 +1,5 @@
 #include "TerrainApp.h"
+#include <vector>
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
@@ -417,6 +418,7 @@ TerrainApp::TerrainApp()
 	psoDesc.SampleDesc = sampleDesc;
 	psoDesc.SampleMask = 0xffffffff;
 	psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+	psoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;
 	psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
 	psoDesc.NumRenderTargets = 1;
 	psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
@@ -428,19 +430,45 @@ TerrainApp::TerrainApp()
 		return;
 	}
 
-	Vertex vList[] = {
-		{ { -10.0f,  0.0f, -10.0f } },
-		{ {  10.0f, 0.0f, -10.0f } },
-		{ { 10.0f, 0.0f, 10.0f } },
-		{ {  -10.0f,  0.0f, 10.0f } }
-	};
+	const float PLANE_SIZE = 100.0f;
+	const float QUAD_SIZE = 5.0f;
+	const int GRID_DIVISIONS = static_cast<int>(PLANE_SIZE / QUAD_SIZE); 
 
-	DWORD iList[] = {
-		0, 2, 1,
-		0, 3, 2
-	};
+	std::vector<Vertex> vList;
+	for (int z = 0; z <= GRID_DIVISIONS; ++z) 
+	{
+		for (int x = 0; x <= GRID_DIVISIONS; ++x) 
+		{
+			float xPos = -PLANE_SIZE / 2.0f + x * QUAD_SIZE;
+			float zPos = -PLANE_SIZE / 2.0f + z * QUAD_SIZE;
+			vList.push_back({ { xPos, 0.0f, zPos } });
+		}
+	}
 
-	int vBufferSize = sizeof(vList);
+	std::vector<DWORD> iList;
+	for (int z = 0; z < GRID_DIVISIONS; ++z) 
+	{
+		for (int x = 0; x < GRID_DIVISIONS; ++x) 
+		{
+			int topLeft = z * (GRID_DIVISIONS + 1) + x;
+			int topRight = topLeft + 1;
+			int bottomLeft = (z + 1) * (GRID_DIVISIONS + 1) + x;
+			int bottomRight = bottomLeft + 1;
+
+			iList.push_back(topLeft);
+			iList.push_back(bottomRight);
+			iList.push_back(topRight);
+
+			iList.push_back(topLeft);
+			iList.push_back(bottomLeft);
+			iList.push_back(bottomRight);
+		}
+	}
+
+	m_vertexCount = static_cast<UINT>(vList.size());
+	m_indexCount = static_cast<UINT>(iList.size());
+
+	int vBufferSize = sizeof(Vertex) * vList.size();
 
 	CD3DX12_RESOURCE_DESC descBufferSize = CD3DX12_RESOURCE_DESC::Buffer(vBufferSize);
 
@@ -468,7 +496,7 @@ TerrainApp::TerrainApp()
 	vBufferUploadHeap->SetName(L"Vertex Buffer Upload Resource Heap");
 
 	D3D12_SUBRESOURCE_DATA vertexData = {};
-	vertexData.pData = reinterpret_cast<BYTE*>(vList);
+	vertexData.pData = reinterpret_cast<BYTE*>(vList.data());
 	vertexData.RowPitch = vBufferSize;
 	vertexData.SlicePitch = vBufferSize;
 
@@ -478,7 +506,7 @@ TerrainApp::TerrainApp()
 
 	m_commandList->ResourceBarrier(1, &copyToVsBarrier);
 
-	int iBufferSize = sizeof(iList);
+	int iBufferSize = sizeof(DWORD) * iList.size();
 
 	CD3DX12_RESOURCE_DESC descIndexBufferSize = CD3DX12_RESOURCE_DESC::Buffer(iBufferSize);
 
@@ -504,7 +532,7 @@ TerrainApp::TerrainApp()
 	vBufferUploadHeap->SetName(L"Index Buffer Upload Resource Heap");
 
 	D3D12_SUBRESOURCE_DATA indexData = {};
-	indexData.pData = reinterpret_cast<BYTE*>(iList);
+	indexData.pData = reinterpret_cast<BYTE*>(iList.data());
 	indexData.RowPitch = iBufferSize;
 	indexData.SlicePitch = iBufferSize;
 
@@ -544,7 +572,7 @@ TerrainApp::TerrainApp()
 	m_scissorRect.right = width;
 	m_scissorRect.bottom = height;
 
-	m_camera.SetPosition({ 0.0f, 3.0f, -5.0f });
+	m_camera.SetPosition({ 0.0f, 6.0f, -5.0f });
 	m_camera.UpdatePerspectiveFOV(0.35f * 3.14159f, (float)width / (float)height);
 
 	m_isRunning = true;
@@ -661,7 +689,7 @@ void TerrainApp::Run()
 		m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 		m_commandList->IASetIndexBuffer(&m_indexBufferView);
 		m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
-		m_commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
+		m_commandList->DrawIndexedInstanced(m_indexCount, 1, 0, 0, 0);
 
 		CD3DX12_RESOURCE_BARRIER rtToPresentTransition = CD3DX12_RESOURCE_BARRIER::Transition(m_renderTargets[m_frameIndex], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
 

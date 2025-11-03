@@ -87,8 +87,10 @@ private:
 	D3D12_RECT m_scissorRect = {};
 	ID3D12Resource* m_vertexBuffer = nullptr;
 	D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView = {};
+	int m_vertexCount = 0;
 	ID3D12Resource* m_indexBuffer = nullptr;
 	D3D12_INDEX_BUFFER_VIEW m_indexBufferView = {};
+	int m_indexCount = 0;
 	ID3D12Resource* m_depthStencilBuffer = nullptr;
 	ID3D12DescriptorHeap* m_dsDescriptorHeap = nullptr;
 	ID3D12DescriptorHeap* m_mainDescriptorHeap[FRAMES_IN_FLIGHT] = {};
