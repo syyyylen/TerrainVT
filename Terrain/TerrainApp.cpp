@@ -359,7 +359,7 @@ TerrainApp::TerrainApp()
 	ID3DBlob* errorBuff;
 	hr = D3DCompileFromFile(L"Shaders/Vertex.hlsl",
 		nullptr,
-		nullptr,
+		D3D_COMPILE_STANDARD_FILE_INCLUDE,
 		"main",
 		"vs_5_0",
 		D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION,
@@ -380,7 +380,7 @@ TerrainApp::TerrainApp()
 	ID3DBlob* pixelShader;
 	hr = D3DCompileFromFile(L"Shaders/Pixel.hlsl",
 		nullptr,
-		nullptr,
+		D3D_COMPILE_STANDARD_FILE_INCLUDE,
 		"main",
 		"ps_5_0",
 		D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION,
@@ -401,7 +401,7 @@ TerrainApp::TerrainApp()
 	ID3DBlob* hullShader;
 	hr = D3DCompileFromFile(L"Shaders/Hull.hlsl",
 		nullptr,
-		nullptr,
+		D3D_COMPILE_STANDARD_FILE_INCLUDE,
 		"main",
 		"hs_5_0",
 		D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION,
@@ -422,7 +422,7 @@ TerrainApp::TerrainApp()
 	ID3DBlob* domainShader;
 	hr = D3DCompileFromFile(L"Shaders/Domain.hlsl",
 		nullptr,
-		nullptr,
+		D3D_COMPILE_STANDARD_FILE_INCLUDE,
 		"main",
 		"ds_5_0",
 		D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION,
@@ -717,7 +717,7 @@ void TerrainApp::Run()
 
 		m_commandList->OMSetRenderTargets(1, &rtvHandle, false, &dsvHandle);
 
-		const float clearColor[] = { 0.0f, 0.2f, 0.4f, 1.0f };
+		const float clearColor[] = { 0.0f, 0.0f, 0.1f, 1.0f };
 		m_commandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
 		m_commandList->ClearDepthStencilView(m_dsDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
