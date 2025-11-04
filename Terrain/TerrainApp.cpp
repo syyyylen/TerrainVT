@@ -335,7 +335,7 @@ TerrainApp::TerrainApp()
 	D3D12_ROOT_PARAMETER  rootParameters[1];
 	rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
 	rootParameters[0].DescriptorTable = descriptorTable;
-	rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+	rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_DOMAIN;
 
 	CD3DX12_ROOT_SIGNATURE_DESC rootSignatureDesc;
 	rootSignatureDesc.Init(_countof(rootParameters), rootParameters, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
@@ -398,6 +398,48 @@ TerrainApp::TerrainApp()
 	pixelShaderBytecode.BytecodeLength = pixelShader->GetBufferSize();
 	pixelShaderBytecode.pShaderBytecode = pixelShader->GetBufferPointer();
 
+	ID3DBlob* hullShader;
+	hr = D3DCompileFromFile(L"Shaders/Hull.hlsl",
+		nullptr,
+		nullptr,
+		"main",
+		"hs_5_0",
+		D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION,
+		0,
+		&hullShader,
+		&errorBuff);
+
+	if (FAILED(hr))
+	{
+		OutputDebugStringA((char*)errorBuff->GetBufferPointer());
+		return;
+	}
+
+	D3D12_SHADER_BYTECODE hullShaderBytecode = {};
+	hullShaderBytecode.BytecodeLength = hullShader->GetBufferSize();
+	hullShaderBytecode.pShaderBytecode = hullShader->GetBufferPointer();
+
+	ID3DBlob* domainShader;
+	hr = D3DCompileFromFile(L"Shaders/Domain.hlsl",
+		nullptr,
+		nullptr,
+		"main",
+		"ds_5_0",
+		D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION,
+		0,
+		&domainShader,
+		&errorBuff);
+
+	if (FAILED(hr))
+	{
+		OutputDebugStringA((char*)errorBuff->GetBufferPointer());
+		return;
+	}
+
+	D3D12_SHADER_BYTECODE domainShaderBytecode = {};
+	domainShaderBytecode.BytecodeLength = domainShader->GetBufferSize();
+	domainShaderBytecode.pShaderBytecode = domainShader->GetBufferPointer();
+
 	D3D12_INPUT_ELEMENT_DESC inputLayout[] =
 	{
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
@@ -413,12 +455,14 @@ TerrainApp::TerrainApp()
 	psoDesc.pRootSignature = m_rootSignature;
 	psoDesc.VS = vertexShaderBytecode;
 	psoDesc.PS = pixelShaderBytecode;
-	psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	psoDesc.HS = hullShaderBytecode;
+	psoDesc.DS = domainShaderBytecode;
+	psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_PATCH;
 	psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
 	psoDesc.SampleDesc = sampleDesc;
 	psoDesc.SampleMask = 0xffffffff;
 	psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
-	psoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;
+	psoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
 	psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
 	psoDesc.NumRenderTargets = 1;
 	psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
@@ -686,7 +730,7 @@ void TerrainApp::Run()
 
 		m_commandList->RSSetViewports(1, &m_viewport);
 		m_commandList->RSSetScissorRects(1, &m_scissorRect);
-		m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST);
 		m_commandList->IASetIndexBuffer(&m_indexBufferView);
 		m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
 		m_commandList->DrawIndexedInstanced(m_indexCount, 1, 0, 0, 0);
