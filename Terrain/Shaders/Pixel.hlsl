@@ -1,14 +1,9 @@
 struct DSOutput
 {
     float4 pos : SV_POSITION;
-    float3 normal : NORMAL;
+    float2 uv : TEXCOORD0;
 };
-
 float4 main(DSOutput input) : SV_TARGET
 {
-    float3 lightDir = normalize(float3(0.5f, 1.0f, 0.5f));
-    
-    float3 color = input.normal * 0.5f + 0.5f;
-    
-    return float4(color, 1.0f);
+    return float4(input.uv.x, input.uv.y, 0.0f, 1.0f);
 }

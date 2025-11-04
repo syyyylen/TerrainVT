@@ -442,7 +442,8 @@ TerrainApp::TerrainApp()
 
 	D3D12_INPUT_ELEMENT_DESC inputLayout[] =
 	{
-		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
+		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
 	};
 
 	D3D12_INPUT_LAYOUT_DESC inputLayoutDesc = {};
@@ -485,7 +486,11 @@ TerrainApp::TerrainApp()
 		{
 			float xPos = -PLANE_SIZE / 2.0f + x * QUAD_SIZE;
 			float zPos = -PLANE_SIZE / 2.0f + z * QUAD_SIZE;
-			vList.push_back({ { xPos, 0.0f, zPos } });
+
+			float u = static_cast<float>(x) / GRID_DIVISIONS;
+			float v = static_cast<float>(z) / GRID_DIVISIONS;
+
+			vList.push_back({ { xPos, 0.0f, zPos }, { u, v } });
 		}
 	}
 

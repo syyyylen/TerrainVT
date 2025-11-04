@@ -34,6 +34,7 @@ private:
 
 	struct Vertex {
 		DirectX::XMFLOAT3 pos;
+		DirectX::XMFLOAT2 uv;
 	};
 
 	struct Vec2
@@ -67,7 +68,7 @@ private:
 	Camera m_camera = {};
 	float m_cameraForward = 0.0f;
 	float m_cameraRight = 0.0f;
-	float m_cameraMoveSpeed = 8.0f;
+	float m_cameraMoveSpeed = 16.0f;
 
 	ID3D12Device* m_device = nullptr;
 	IDXGISwapChain3* m_swapChain = nullptr;

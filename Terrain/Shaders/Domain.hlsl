@@ -7,12 +7,13 @@ struct HSConstantOutput
 struct HSOutput
 {
     float3 pos : POSITION;
+    float2 uv : TEXCOORD0;
 };
 
 struct DSOutput
 {
     float4 pos : SV_POSITION;
-    float3 normal : NORMAL;
+    float2 uv : TEXCOORD0;
 };
 
 cbuffer ConstantBuffer : register(b0)
@@ -31,10 +32,7 @@ DSOutput main(HSConstantOutput input, float3 bary : SV_DomainLocation, const Out
     
     output.pos = mul(float4(pos, 1.0f), viewProj);
     
-    float3 tangent = float3(1.0f, -sin(pos.x) * 1.2f, 0.0f);
-    float3 bitangent = float3(0.0f, 0.0f, 1.0f);
-    
-    output.normal = normalize(cross(tangent, bitangent));
+    output.uv = patch[0].uv * bary.x + patch[1].uv * bary.y + patch[2].uv * bary.z;
     
     return output;
 }

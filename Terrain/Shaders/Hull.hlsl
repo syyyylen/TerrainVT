@@ -1,11 +1,13 @@
 struct VSOutput
 {
     float4 pos : SV_POSITION;
+    float2 uv : TEXCOORD0;
 };
 
 struct HSOutput
 {
     float3 pos : POSITION;
+    float2 uv : TEXCOORD0;
 };
 
 struct HSConstantOutput
@@ -38,5 +40,6 @@ HSOutput main(InputPatch<VSOutput, 3> patch, uint i : SV_OutputControlPointID, u
 {
     HSOutput output;
     output.pos = patch[i].pos.xyz;
+    output.uv = patch[i].uv;
     return output;
 }
