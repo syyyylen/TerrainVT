@@ -14,6 +14,8 @@
 
 #define FRAMES_IN_FLIGHT 3
 
+#define ENABLE_IMGUI 0
+
 class TerrainApp 
 {
 public:

@@ -37,7 +37,19 @@ set_source_files_properties( Shaders/Domain.hlsl PROPERTIES
 )
 
 # Add source to this project's executable
-add_executable(Terrain "Main.cpp" "TerrainApp.h" "TerrainApp.cpp" "Include/d3dx12.h" ${SHADER_FILES} "Camera.cpp" "Camera.h" "Include/stb/stb.cpp" "Include/stb/stb_image.h" "Include/stb/stb_image_write.h")
+add_executable(Terrain 
+"Main.cpp" 
+"TerrainApp.h" "TerrainApp.cpp" 
+"Include/d3dx12.h" 
+${SHADER_FILES} 
+"Camera.cpp" "Camera.h" 
+"Include/stb/stb.cpp" "Include/stb/stb_image.h" "Include/stb/stb_image_write.h" 
+"Include/ImGui/imconfig.h" "Include/ImGui/imgui.cpp" "Include/ImGui/imgui.h" 
+"Include/ImGui/ImGuizmo.cpp" "Include/ImGui/ImGuizmo.h" "Include/ImGui/imgui_demo.cpp" 
+"Include/ImGui/imgui_draw.cpp" "Include/ImGui/imgui_impl_dx12.cpp" "Include/ImGui/imgui_impl_dx12.h" 
+"Include/ImGui/imgui_impl_win32.cpp" "Include/ImGui/imgui_impl_win32.h" "Include/ImGui/imgui_internal.h" 
+"Include/ImGui/imgui_tables.cpp" "Include/ImGui/imgui_widgets.cpp" "Include/ImGui/imstb_rectpack.h" 
+"Include/ImGui/imstb_textedit.h" "Include/ImGui/imstb_truetype.h")
 
 # Include D3D12
 target_link_libraries(Terrain PUBLIC d3d12.lib d3dcompiler.lib dxcompiler.lib dxgi.lib)

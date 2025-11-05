@@ -2,6 +2,12 @@
 #include <vector>
 #include "Include/stb/stb_image.h"
 
+#if ENABLE_IMGUI
+#include "Include/ImGui/imgui_impl_dx12.h"
+#include "Include/ImGui/imgui_impl_win32.h"
+#include "Include/ImGui/imgui.h"
+#endif
+
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
 	TerrainApp* app = reinterpret_cast<TerrainApp*>(::GetWindowLongPtrW(hwnd, GWLP_USERDATA));
@@ -278,7 +284,6 @@ TerrainApp::TerrainApp()
 		cbvDesc.SizeInBytes = (sizeof(ConstantBuffer) + 255) & ~255;
 		m_device->CreateConstantBufferView(&cbvDesc, m_mainDescriptorHeap[i]->GetCPUDescriptorHandleForHeapStart());
 
-
 		ZeroMemory(&m_constantBuffer, sizeof(m_constantBuffer));
 
 		CD3DX12_RANGE readRange(0, 0);
@@ -498,8 +503,8 @@ TerrainApp::TerrainApp()
 		return;
 	}
 
-	const float PLANE_SIZE = 100.0f;
-	const float QUAD_SIZE = 5.0f;
+	const float PLANE_SIZE = 200.0f;
+	const float QUAD_SIZE = 10.0f;
 	const int GRID_DIVISIONS = static_cast<int>(PLANE_SIZE / QUAD_SIZE); 
 
 	std::vector<Vertex> vList;
@@ -732,11 +737,40 @@ TerrainApp::TerrainApp()
 	m_camera.SetPosition({ 0.0f, 6.0f, -5.0f });
 	m_camera.UpdatePerspectiveFOV(0.35f * 3.14159f, (float)width / (float)height);
 
+#if ENABLE_IMGUI
+
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO(); (void)io;
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+
+	ImGui::StyleColorsDark();
+
+	ImGui_ImplWin32_EnableDpiAwareness();
+	ImGui_ImplWin32_Init(m_hwnd);
+	ImGui_ImplDX12_Init(m_device, 
+		FRAMES_IN_FLIGHT, 
+		DXGI_FORMAT_R8G8B8A8_UNORM, 
+		m_mainDescriptorHeap[0], 
+		m_mainDescriptorHeap[0]->GetCPUDescriptorHandleForHeapStart(), 
+		m_mainDescriptorHeap[0]->GetGPUDescriptorHandleForHeapStart());
+
+#endif
+
 	m_isRunning = true;
 }
 
 TerrainApp::~TerrainApp()
 {
+
+#if ENABLE_IMGUI
+	ImGui_ImplDX12_Shutdown();
+	ImGui_ImplWin32_Shutdown();
+	ImGui::DestroyContext();
+#endif
+
 	if (m_device)
 		m_device->Release();
 
@@ -848,6 +882,26 @@ void TerrainApp::Run()
 		m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
 		m_commandList->DrawIndexedInstanced(m_indexCount, 1, 0, 0, 0);
 
+		m_commandList->OMSetRenderTargets(1, &rtvHandle, false, nullptr);
+
+#if ENABLE_IMGUI
+
+		ImGui_ImplDX12_NewFrame();
+		ImGui_ImplWin32_NewFrame();
+		ImGui::NewFrame();
+
+		ImGui::Begin("FrameRate");
+		ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+		ImGui::End();
+
+		ID3D12DescriptorHeap* imguiHeaps[] = { m_mainDescriptorHeap[0]};
+		m_commandList->SetDescriptorHeaps(1, imguiHeaps);
+
+		ImGui::Render();
+		ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), m_commandList);
+
+#endif
+
 		CD3DX12_RESOURCE_BARRIER rtToPresentTransition = CD3DX12_RESOURCE_BARRIER::Transition(m_renderTargets[m_frameIndex], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
 
 		m_commandList->ResourceBarrier(1, &rtToPresentTransition);
@@ -870,7 +924,7 @@ void TerrainApp::Run()
 			return;
 		}
 
-		hr = m_swapChain->Present(0, 0);
+		hr = m_swapChain->Present(false, 0);
 
 		if (FAILED(hr))
 		{
