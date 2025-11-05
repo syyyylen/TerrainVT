@@ -247,7 +247,7 @@ TerrainApp::TerrainApp()
 	for (int i = 0; i < FRAMES_IN_FLIGHT; ++i)
 	{
 		D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
-		heapDesc.NumDescriptors = 1;
+		heapDesc.NumDescriptors = 2;
 		heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 		heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 		hr = m_device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&m_mainDescriptorHeap[i]));
@@ -322,12 +322,19 @@ TerrainApp::TerrainApp()
 		return;
 	}
 
-	D3D12_DESCRIPTOR_RANGE  descriptorTableRanges[1];
+	D3D12_DESCRIPTOR_RANGE  descriptorTableRanges[2];
+
 	descriptorTableRanges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
 	descriptorTableRanges[0].NumDescriptors = 1;
 	descriptorTableRanges[0].BaseShaderRegister = 0;
 	descriptorTableRanges[0].RegisterSpace = 0;
 	descriptorTableRanges[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+	descriptorTableRanges[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+	descriptorTableRanges[1].NumDescriptors = 1;
+	descriptorTableRanges[1].BaseShaderRegister = 0;
+	descriptorTableRanges[1].RegisterSpace = 0;
+	descriptorTableRanges[1].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
 	D3D12_ROOT_DESCRIPTOR_TABLE descriptorTable;
 	descriptorTable.NumDescriptorRanges = _countof(descriptorTableRanges);
@@ -336,10 +343,25 @@ TerrainApp::TerrainApp()
 	D3D12_ROOT_PARAMETER  rootParameters[1];
 	rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
 	rootParameters[0].DescriptorTable = descriptorTable;
-	rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_DOMAIN;
+	rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+
+	D3D12_STATIC_SAMPLER_DESC sampler = {};
+	sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
+	sampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
+	sampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
+	sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
+	sampler.MipLODBias = 0;
+	sampler.MaxAnisotropy = 0;
+	sampler.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+	sampler.BorderColor = D3D12_STATIC_BORDER_COLOR_TRANSPARENT_BLACK;
+	sampler.MinLOD = 0.0f;
+	sampler.MaxLOD = D3D12_FLOAT32_MAX;
+	sampler.ShaderRegister = 0;
+	sampler.RegisterSpace = 0;
+	sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
 	CD3DX12_ROOT_SIGNATURE_DESC rootSignatureDesc;
-	rootSignatureDesc.Init(_countof(rootParameters), rootParameters, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+	rootSignatureDesc.Init(_countof(rootParameters), rootParameters, 1, &sampler, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
 	ID3DBlob* signature;
 	hr = D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signature, nullptr);
@@ -590,6 +612,91 @@ TerrainApp::TerrainApp()
 
 	m_commandList->ResourceBarrier(1, &copyToVsBarrier);
 
+	Image groundTexture;
+	groundTexture.LoadImageFromFile("Assets/Ground.jpg");
+
+	D3D12_RESOURCE_DESC textureDesc = {};
+	textureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	textureDesc.Alignment = 0;
+	textureDesc.Width = groundTexture.Width;
+	textureDesc.Height = groundTexture.Height;
+	textureDesc.DepthOrArraySize = 1;
+	textureDesc.MipLevels = 1;
+	textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	textureDesc.SampleDesc.Count = 1;
+	textureDesc.SampleDesc.Quality = 0;
+	textureDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+	textureDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+	hr = m_device->CreateCommittedResource(
+		&heapPropDefault,
+		D3D12_HEAP_FLAG_NONE,
+		&textureDesc,
+		D3D12_RESOURCE_STATE_COPY_DEST,
+		nullptr,
+		IID_PPV_ARGS(&m_textureBuffer));
+
+	if (FAILED(hr))
+	{
+		return;
+	}
+
+	m_textureBuffer->SetName(L"Texture Buffer Resource Heap");
+
+	UINT64 textureUploadBufferSize;
+	m_device->GetCopyableFootprints(&textureDesc, 0, 1, 0, nullptr, nullptr, nullptr, &textureUploadBufferSize);
+
+	CD3DX12_RESOURCE_DESC texUploadBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(textureUploadBufferSize);
+
+	hr = m_device->CreateCommittedResource(
+		&heapPropUpload,
+		D3D12_HEAP_FLAG_NONE,
+		&texUploadBufferDesc,
+		D3D12_RESOURCE_STATE_GENERIC_READ,
+		nullptr,
+		IID_PPV_ARGS(&m_textureBufferUploadHeap));
+
+	if (FAILED(hr))
+	{
+		return;
+	}
+
+	m_textureBufferUploadHeap->SetName(L"Texture Buffer Upload Resource Heap");
+
+	D3D12_SUBRESOURCE_DATA textureData = {};
+	textureData.pData = groundTexture.Bytes;
+	textureData.RowPitch = groundTexture.Width * 4;
+	textureData.SlicePitch = groundTexture.Width * 4 * textureDesc.Height;
+
+	UpdateSubresources(m_commandList, m_textureBuffer, m_textureBufferUploadHeap, 0, 0, 1, &textureData);
+
+	CD3DX12_RESOURCE_BARRIER textureTransition = CD3DX12_RESOURCE_BARRIER::Transition(m_textureBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+
+	m_commandList->ResourceBarrier(1, &textureTransition);
+
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc.Format = textureDesc.Format;
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc.Texture2D.MipLevels = 1;
+
+	UINT descriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+	for (int i = 0; i < FRAMES_IN_FLIGHT; ++i)
+	{
+		CD3DX12_CPU_DESCRIPTOR_HANDLE srvHandle(
+			m_mainDescriptorHeap[i]->GetCPUDescriptorHandleForHeapStart(),
+			1,
+			descriptorSize);
+
+		m_device->CreateShaderResourceView(m_textureBuffer, &srvDesc, srvHandle);
+	}
+
+	if (FAILED(hr))
+	{
+		return;
+	}
+
 	m_commandList->Close();
 	ID3D12CommandList* ppCommandLists[] = { m_commandList };
 	m_commandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
@@ -624,9 +731,6 @@ TerrainApp::TerrainApp()
 
 	m_camera.SetPosition({ 0.0f, 6.0f, -5.0f });
 	m_camera.UpdatePerspectiveFOV(0.35f * 3.14159f, (float)width / (float)height);
-
-	Image groundTexture;
-	groundTexture.LoadImageFromFile("Assets/Ground.jpg");
 
 	m_isRunning = true;
 }

@@ -111,4 +111,6 @@ private:
 	ID3D12Resource* m_constantBufferUploadHeap[FRAMES_IN_FLIGHT] = {};
 	ConstantBuffer m_constantBuffer = {};
 	UINT8* m_constantBufferGPUAddress[FRAMES_IN_FLIGHT] = {};
+	ID3D12Resource* m_textureBuffer = nullptr;
+	ID3D12Resource* m_textureBufferUploadHeap = nullptr;
 };

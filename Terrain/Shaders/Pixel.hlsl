@@ -3,7 +3,13 @@ struct DSOutput
     float4 pos : SV_POSITION;
     float2 uv : TEXCOORD0;
 };
+
+Texture2D t1 : register(t0);
+SamplerState s1 : register(s0);
+
 float4 main(DSOutput input) : SV_TARGET
 {
-    return float4(input.uv.x, input.uv.y, 0.0f, 1.0f);
+    float3 texColor = t1.Sample(s1, input.uv).xyz;
+    
+    return float4(texColor, 1.0f);
 }
