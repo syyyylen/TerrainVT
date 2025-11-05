@@ -26,6 +26,8 @@ public:
 	void Run();
 	void Quit();
 
+	void OnWindowResize(int width, int height);
+
 private:
 
 	void WaitForPreviousFrame();
@@ -68,6 +70,7 @@ private:
 	void OnRightMouseUp(Vec2 pos);
 	void UpdateInputs();
 
+	bool m_maximizeAtStart = false;
 	bool m_isMouseLocked = true;
 	unsigned char m_keys_state[256] = {};
 	unsigned char m_old_keys_state[256] = {};

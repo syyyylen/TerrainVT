@@ -16,8 +16,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	{
 	case WM_SIZE:
 	{
-		// TODO resize rtv
-		// TODO update camera perspective FOV
+		int width = LOWORD(lParam);
+		int height = HIWORD(lParam);
+
+		if (app)
+			app->OnWindowResize(width, height);
+
 		break;
 	}
 
@@ -78,6 +82,23 @@ TerrainApp::TerrainApp()
 
 	::ShowWindow(m_hwnd, SW_SHOW);
 	::UpdateWindow(m_hwnd);
+
+	if (m_maximizeAtStart) 
+	{
+		RECT workArea;
+		MONITORINFO monitorInfo;
+		monitorInfo.cbSize = sizeof(MONITORINFO);
+		GetMonitorInfo(MonitorFromWindow(m_hwnd, MONITOR_DEFAULTTONEAREST), &monitorInfo);
+		workArea = monitorInfo.rcWork;
+
+		SetWindowPos(m_hwnd, HWND_TOP, workArea.left, workArea.top, workArea.right - workArea.left, workArea.bottom - workArea.top, SWP_SHOWWINDOW);
+
+		RECT ClientRect;
+		GetClientRect(m_hwnd, &ClientRect);
+		width = ClientRect.right - ClientRect.left;
+		height = ClientRect.bottom - ClientRect.top;
+	}
+
 	::ShowCursor(false);
 	int centerX = width / 2;
 	int centerY = height / 2;
@@ -936,6 +957,117 @@ void TerrainApp::Run()
 void TerrainApp::Quit()
 {
 	m_isRunning = false;
+}
+
+void TerrainApp::OnWindowResize(int width, int height)
+{
+	if (!m_isRunning)
+		return;
+
+	for (int i = 0; i < FRAMES_IN_FLIGHT; ++i)
+	{
+		const UINT64 fenceToWaitFor = m_fenceValues[i];
+		m_commandQueue->Signal(m_fences[i], fenceToWaitFor);
+
+		if (m_fences[i]->GetCompletedValue() < fenceToWaitFor)
+		{
+			m_fences[i]->SetEventOnCompletion(fenceToWaitFor, m_fenceEvent);
+			WaitForSingleObject(m_fenceEvent, INFINITE);
+		}
+	}
+
+	for (int i = 0; i < FRAMES_IN_FLIGHT; ++i)
+	{
+		if (m_renderTargets[i]) 
+		{
+			m_renderTargets[i]->Release();
+			m_renderTargets[i] = nullptr;
+		}
+	};
+
+	if (m_depthStencilBuffer)
+	{
+		m_depthStencilBuffer->Release();
+		m_depthStencilBuffer = nullptr;
+	}
+
+	HRESULT hr;
+
+	hr = m_swapChain->ResizeBuffers(
+		FRAMES_IN_FLIGHT,
+		width,
+		height,
+		DXGI_FORMAT_R8G8B8A8_UNORM,
+		0
+	);
+
+	if (FAILED(hr))
+	{
+		return;
+	}
+
+	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+
+	for (int i = 0; i < FRAMES_IN_FLIGHT; i++)
+	{
+		hr = m_swapChain->GetBuffer(i, IID_PPV_ARGS(&m_renderTargets[i]));
+
+		if (FAILED(hr))
+		{
+			return;
+		}
+
+		m_device->CreateRenderTargetView(m_renderTargets[i], nullptr, rtvHandle);
+		rtvHandle.Offset(1, m_rtvDescriptorSize);
+	}
+
+	CD3DX12_HEAP_PROPERTIES heapPropDefault(D3D12_HEAP_TYPE_DEFAULT);
+
+	D3D12_CLEAR_VALUE depthOptimizedClearValue = {};
+	depthOptimizedClearValue.Format = DXGI_FORMAT_D32_FLOAT;
+	depthOptimizedClearValue.DepthStencil.Depth = 1.0f;
+	depthOptimizedClearValue.DepthStencil.Stencil = 0;
+
+	CD3DX12_RESOURCE_DESC depthStencilDescRes = CD3DX12_RESOURCE_DESC::Tex2D(
+		DXGI_FORMAT_D32_FLOAT,
+		width,
+		height,
+		1,
+		0,
+		1,
+		0,
+		D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL
+	);
+
+	hr = m_device->CreateCommittedResource(
+		&heapPropDefault,
+		D3D12_HEAP_FLAG_NONE,
+		&depthStencilDescRes,
+		D3D12_RESOURCE_STATE_DEPTH_WRITE,
+		&depthOptimizedClearValue,
+		IID_PPV_ARGS(&m_depthStencilBuffer)
+	);
+
+	if (FAILED(hr))
+	{
+		return;
+	}
+
+	D3D12_DEPTH_STENCIL_VIEW_DESC depthStencilDesc = {};
+	depthStencilDesc.Format = DXGI_FORMAT_D32_FLOAT;
+	depthStencilDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+	depthStencilDesc.Flags = D3D12_DSV_FLAG_NONE;
+
+	m_device->CreateDepthStencilView(m_depthStencilBuffer, &depthStencilDesc, m_dsDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+
+	m_viewport.Width = static_cast<float>(width);
+	m_viewport.Height = static_cast<float>(height);
+	m_scissorRect.right = width;
+	m_scissorRect.bottom = height;
+
+	m_camera.UpdatePerspectiveFOV(0.35f * 3.14159f, (float)width / (float)height);
+
+	m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
 }
 
 void TerrainApp::WaitForPreviousFrame()
