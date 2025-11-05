@@ -1,5 +1,6 @@
 #include "TerrainApp.h"
-#include <vector>
+#include <dxcapi.h>
+#include <fstream>
 #include "Include/stb/stb_image.h"
 
 #if ENABLE_IMGUI
@@ -403,7 +404,7 @@ TerrainApp::TerrainApp()
 	sampler.MaxLOD = D3D12_FLOAT32_MAX;
 	sampler.ShaderRegister = 0;
 	sampler.RegisterSpace = 0;
-	sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+	sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 
 	CD3DX12_ROOT_SIGNATURE_DESC rootSignatureDesc;
 	rootSignatureDesc.Init(_countof(rootParameters), rootParameters, 1, &sampler, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
@@ -425,90 +426,37 @@ TerrainApp::TerrainApp()
 
 	// ------------------------------------------------ Shaders Compilation ------------------------------------------------
 
-	ID3DBlob* vertexShader;
-	ID3DBlob* errorBuff;
-	hr = D3DCompileFromFile(L"Shaders/Vertex.hlsl",
-		nullptr,
-		D3D_COMPILE_STANDARD_FILE_INCLUDE,
-		"main",
-		"vs_5_0",
-		D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION,
-		0,
-		&vertexShader,
-		&errorBuff);
-
-	if (FAILED(hr))
-	{
-		OutputDebugStringA((char*)errorBuff->GetBufferPointer());
-		return;
-	}
+	ShaderData vertexShaderData = {};
+	CompileShaderFromFile("Shaders/Vertex.hlsl", ShaderType::Vertex, vertexShaderData);
 
 	D3D12_SHADER_BYTECODE vertexShaderBytecode = {};
-	vertexShaderBytecode.BytecodeLength = vertexShader->GetBufferSize();
-	vertexShaderBytecode.pShaderBytecode = vertexShader->GetBufferPointer();
+	vertexShaderBytecode.BytecodeLength = vertexShaderData.bytecode.size() * sizeof(uint32_t);
+	vertexShaderBytecode.pShaderBytecode = vertexShaderData.bytecode.data();
 
-	ID3DBlob* pixelShader;
-	hr = D3DCompileFromFile(L"Shaders/Pixel.hlsl",
-		nullptr,
-		D3D_COMPILE_STANDARD_FILE_INCLUDE,
-		"main",
-		"ps_5_0",
-		D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION,
-		0,
-		&pixelShader,
-		&errorBuff);
 
-	if (FAILED(hr))
-	{
-		OutputDebugStringA((char*)errorBuff->GetBufferPointer());
-		return;
-	}
+	ShaderData pixelShaderData = {};
+	CompileShaderFromFile("Shaders/Pixel.hlsl", ShaderType::Pixel, pixelShaderData);
 
 	D3D12_SHADER_BYTECODE pixelShaderBytecode = {};
-	pixelShaderBytecode.BytecodeLength = pixelShader->GetBufferSize();
-	pixelShaderBytecode.pShaderBytecode = pixelShader->GetBufferPointer();
+	pixelShaderBytecode.BytecodeLength = pixelShaderData.bytecode.size() * sizeof(uint32_t);
+	pixelShaderBytecode.pShaderBytecode = pixelShaderData.bytecode.data();
 
-	ID3DBlob* hullShader;
-	hr = D3DCompileFromFile(L"Shaders/Hull.hlsl",
-		nullptr,
-		D3D_COMPILE_STANDARD_FILE_INCLUDE,
-		"main",
-		"hs_5_0",
-		D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION,
-		0,
-		&hullShader,
-		&errorBuff);
 
-	if (FAILED(hr))
-	{
-		OutputDebugStringA((char*)errorBuff->GetBufferPointer());
-		return;
-	}
+	ShaderData hullShaderData = {};
+	CompileShaderFromFile("Shaders/Hull.hlsl", ShaderType::Hull, hullShaderData);
 
 	D3D12_SHADER_BYTECODE hullShaderBytecode = {};
-	hullShaderBytecode.BytecodeLength = hullShader->GetBufferSize();
-	hullShaderBytecode.pShaderBytecode = hullShader->GetBufferPointer();
+	hullShaderBytecode.BytecodeLength = hullShaderData.bytecode.size() * sizeof(uint32_t);
+	hullShaderBytecode.pShaderBytecode = hullShaderData.bytecode.data();
 
-	ID3DBlob* domainShader;
-	hr = D3DCompileFromFile(L"Shaders/Domain.hlsl",
-		nullptr,
-		D3D_COMPILE_STANDARD_FILE_INCLUDE,
-		"main",
-		"ds_5_0",
-		D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION,
-		0,
-		&domainShader,
-		&errorBuff);
 
-	if (FAILED(hr))
-	{
-		OutputDebugStringA((char*)errorBuff->GetBufferPointer());
-		return;
-	}
+	ShaderData domainShaderData = {};
+	CompileShaderFromFile("Shaders/Domain.hlsl", ShaderType::Domain, domainShaderData);
 
 	D3D12_SHADER_BYTECODE domainShaderBytecode = {};
-	domainShaderBytecode.BytecodeLength = domainShader->GetBufferSize();
-	domainShaderBytecode.pShaderBytecode = domainShader->GetBufferPointer();
+	domainShaderBytecode.BytecodeLength = domainShaderData.bytecode.size() * sizeof(uint32_t);
+	domainShaderBytecode.pShaderBytecode = domainShaderData.bytecode.data();
+
 
 	// ------------------------------------------------ D3D12 Init (PSO) ------------------------------------------------
 
@@ -668,7 +616,7 @@ TerrainApp::TerrainApp()
 	// ------------------------------------------------ Terrain Test Texture ------------------------------------------------
 
 	Image groundTexture;
-	groundTexture.LoadImageFromFile("Assets/Ground.jpg");
+	groundTexture.LoadImageFromFile("Assets/Heightmap.png");
 
 	D3D12_RESOURCE_DESC textureDesc = {};
 	textureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -1138,6 +1086,128 @@ void TerrainApp::WaitForPreviousFrame()
 	}
 
 	m_fenceValues[m_frameIndex]++;
+}
+
+// ------------------------------------------------ DXC Shader Compilation ------------------------------------------------
+
+void TerrainApp::CompileShaderFromFile(const std::string& path, ShaderType shaderType, ShaderData& outShaderData)
+{
+	std::ifstream file(path, std::ios::binary);
+	if (!file)
+		return;
+
+	file.seekg(0, std::ios::end);
+	size_t size = (size_t)file.tellg();
+	file.seekg(0, std::ios::beg);
+
+	std::vector<char> shaderData(size);
+	file.read(shaderData.data(), size);
+
+	HRESULT hr;
+
+	IDxcUtils* dxcUtils;
+	IDxcCompiler* compiler;
+	IDxcIncludeHandler* defaultIncludeHandler;
+	IDxcBlobEncoding* sourceBlob;
+	DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&dxcUtils));
+	DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&compiler));
+
+	hr  = dxcUtils->CreateDefaultIncludeHandler(&defaultIncludeHandler);
+
+	if (FAILED(hr))
+	{
+		return;
+	}	
+
+	hr = dxcUtils->CreateBlob(shaderData.data(), shaderData.size(), 0, &sourceBlob);
+
+	if (FAILED(hr))
+	{
+		return;
+	}
+
+	DxcBuffer sourceBuffer;
+	sourceBuffer.Ptr = shaderData.data();
+	sourceBuffer.Size = shaderData.size();
+	sourceBuffer.Encoding = DXC_CP_ACP;
+
+	const char* shaderTypeChar;
+	switch (shaderType)
+	{
+		case ShaderType::Vertex: {
+			shaderTypeChar = "vs_6_6";
+			break;
+		}
+		case ShaderType::Pixel: {
+			shaderTypeChar = "ps_6_6";
+			break;
+		}
+		case ShaderType::Compute: {
+			shaderTypeChar = "cs_6_6";
+			break;
+		}
+		case ShaderType::Hull: {
+			shaderTypeChar = "hs_6_6";
+			break;
+		}
+		case ShaderType::Domain: {
+			shaderTypeChar = "ds_6_6";
+			break;
+		}
+	}
+
+	wchar_t wideTarget[512];
+	swprintf_s(wideTarget, 512, L"%hs", shaderTypeChar);
+
+	std::string entryPoint = "main";
+	wchar_t wideEntry[512];
+	swprintf_s(wideEntry, 512, L"%hs", entryPoint.c_str());
+
+	LPCWSTR args[] = {
+		L"-Zs",
+		L"-Fd",
+		L"-Fre"
+	};
+
+	IDxcOperationResult* result;
+
+	hr = compiler->Compile(
+		sourceBlob,
+		L"Shader",
+		wideEntry,
+		wideTarget,
+		args,
+		ARRAYSIZE(args),
+		nullptr,
+		0,
+		defaultIncludeHandler,
+		&result);
+
+	if (FAILED(hr))
+	{
+		return;
+	}
+
+	IDxcBlobEncoding* errors;
+	result->GetErrorBuffer(&errors);
+
+	if (errors && errors->GetBufferSize() != 0)
+	{
+		IDxcBlobUtf8* pErrorsU8;
+		errors->QueryInterface(IID_PPV_ARGS(&pErrorsU8));
+		std::string error((char*)pErrorsU8->GetStringPointer());
+		std::cout << error << std::endl;
+		return;
+	}
+
+	HRESULT status;
+	result->GetStatus(&status);
+
+	IDxcBlob* shaderBlob;
+	result->GetResult(&shaderBlob);
+
+	outShaderData.bytecode.resize(shaderBlob->GetBufferSize() / sizeof(uint32_t));
+	memcpy(outShaderData.bytecode.data(), shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize());
 }
 
 // ------------------------------------------------ Input Handling ------------------------------------------------

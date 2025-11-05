@@ -11,27 +11,27 @@ source_group( "Resources\\Shaders" FILES ${SHADER_FILES} )
 # Set shader properties for Visual Studio
 set_source_files_properties( Shaders/Vertex.hlsl PROPERTIES 
     VS_SHADER_TYPE Vertex
-    VS_SHADER_MODEL 5.1
+    VS_SHADER_MODEL 6.0
     VS_SHADER_OBJECT_FILE_NAME ""
     VS_TOOL_OVERRIDE "None"
 )
 set_source_files_properties( Shaders/Pixel.hlsl PROPERTIES 
     VS_SHADER_TYPE Pixel
-    VS_SHADER_MODEL 5.1
+    VS_SHADER_MODEL 6.0
     VS_SHADER_OBJECT_FILE_NAME ""
     VS_TOOL_OVERRIDE "None"
 )
 
 set_source_files_properties( Shaders/Hull.hlsl PROPERTIES 
     VS_SHADER_TYPE Hull
-    VS_SHADER_MODEL 5.1
+    VS_SHADER_MODEL 6.0
     VS_SHADER_OBJECT_FILE_NAME ""
     VS_TOOL_OVERRIDE "None"
 )
 
 set_source_files_properties( Shaders/Domain.hlsl PROPERTIES 
     VS_SHADER_TYPE Domain
-    VS_SHADER_MODEL 5.1
+    VS_SHADER_MODEL 6.0
     VS_SHADER_OBJECT_FILE_NAME ""
     VS_TOOL_OVERRIDE "None"
 )
@@ -68,6 +68,17 @@ add_custom_command(TARGET Terrain POST_BUILD
         ${CMAKE_CURRENT_SOURCE_DIR}/Assets
         $<TARGET_FILE_DIR:Terrain>/Assets
     COMMENT "Copying assets to output directory"
+)
+
+# Copy DXC runtime DLLs (from local Bin/ folder) to the build output
+add_custom_command(TARGET Terrain POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${CMAKE_CURRENT_SOURCE_DIR}/Bin/dxcompiler.dll
+        $<TARGET_FILE_DIR:Terrain>/dxcompiler.dll
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${CMAKE_CURRENT_SOURCE_DIR}/Bin/dxil.dll
+        $<TARGET_FILE_DIR:Terrain>/dxil.dll
+    COMMENT "Copying DXC runtime DLLs (dxcompiler.dll, dxil.dll) to output directory"
 )
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)

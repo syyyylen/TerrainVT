@@ -4,11 +4,11 @@
 #include <iostream>
 #include <iomanip>
 #include <ctime>
+#include <vector>
 
 #include <d3d12.h>
 #include <dxgi1_4.h>
 #include <DirectXMath.h>
-#include <d3dcompiler.h>
 #include "Include/d3dx12.h"
 #include "Camera.h"
 
@@ -31,6 +31,24 @@ public:
 private:
 
 	void WaitForPreviousFrame();
+
+	// ------------------------ Shader Compilation ------------------------
+
+	enum class ShaderType
+	{
+		Vertex,
+		Pixel,
+		Compute,
+		Hull,
+		Domain
+	};
+
+	struct ShaderData 
+	{
+		std::vector<uint32_t> bytecode;
+	};
+
+	void CompileShaderFromFile(const std::string& path, ShaderType shaderType, ShaderData& outShaderData);
 
 	// ------------------------ Render Data Structures ------------------------
 
