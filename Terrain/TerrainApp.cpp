@@ -8,6 +8,8 @@
 #include "Include/ImGui/imgui.h"
 #endif
 
+// ------------------------------------------------ Window Proc ------------------------------------------------
+
 extern LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
@@ -54,6 +56,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 TerrainApp::TerrainApp()
 {
 	m_startTime = static_cast<float>(::clock());
+
+	// ------------------------------------------------ Window Creation ------------------------------------------------
 
 	WNDCLASSEXW wc = {};
 	wc.cbSize = sizeof(WNDCLASSEX);
@@ -108,6 +112,8 @@ TerrainApp::TerrainApp()
 	int centerX = width / 2;
 	int centerY = height / 2;
 	::SetCursorPos(centerX, centerY);
+
+	// ------------------------------------------------ D3D12 Device Creation ------------------------------------------------
 
 	HRESULT hr;
 
@@ -164,6 +170,8 @@ TerrainApp::TerrainApp()
 
 	std::cout << "D3D12 Device : " << DeviceName << std::endl;
 
+	// ------------------------------------------------ D3D12 Init (Cmd Queue, Swap Chain) ------------------------------------------------
+
 	D3D12_COMMAND_QUEUE_DESC cqDesc = {};
 
 	hr = m_device->CreateCommandQueue(&cqDesc, IID_PPV_ARGS(&m_commandQueue));
@@ -199,6 +207,8 @@ TerrainApp::TerrainApp()
 	tempSwapChain->Release();
 
 	m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
+
+	// ------------------------------------------------ D3D12 Init (CBV SRV DSV Descriptor Heaps) ------------------------------------------------
 
 	D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
 	rtvHeapDesc.NumDescriptors = FRAMES_IN_FLIGHT;
@@ -279,7 +289,7 @@ TerrainApp::TerrainApp()
 	for (int i = 0; i < FRAMES_IN_FLIGHT; ++i)
 	{
 		D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
-		heapDesc.NumDescriptors = 100; // Unified heap: terrain descriptors (0-9) + ImGui descriptors (10+)
+		heapDesc.NumDescriptors = 100;
 		heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 		heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 		hr = m_device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&m_mainDescriptorHeap[i]));
@@ -317,6 +327,8 @@ TerrainApp::TerrainApp()
 		memcpy(m_constantBufferGPUAddress[i], &m_constantBuffer, sizeof(m_constantBuffer));
 	}
 
+	// ------------------------------------------------ D3D12 Init (Cmd List, Fences) ------------------------------------------------
+
 	for (int i = 0; i < FRAMES_IN_FLIGHT; i++)
 	{
 		hr = m_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&m_commandAllocators[i]));
@@ -352,6 +364,8 @@ TerrainApp::TerrainApp()
 	{
 		return;
 	}
+
+	// ------------------------------------------------ D3D12 Init (Root Signature) ------------------------------------------------
 
 	D3D12_DESCRIPTOR_RANGE  descriptorTableRanges[2];
 
@@ -408,6 +422,8 @@ TerrainApp::TerrainApp()
 	{
 		return;
 	}
+
+	// ------------------------------------------------ Shaders Compilation ------------------------------------------------
 
 	ID3DBlob* vertexShader;
 	ID3DBlob* errorBuff;
@@ -494,6 +510,8 @@ TerrainApp::TerrainApp()
 	domainShaderBytecode.BytecodeLength = domainShader->GetBufferSize();
 	domainShaderBytecode.pShaderBytecode = domainShader->GetBufferPointer();
 
+	// ------------------------------------------------ D3D12 Init (PSO) ------------------------------------------------
+
 	D3D12_INPUT_ELEMENT_DESC inputLayout[] =
 	{
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
@@ -517,7 +535,7 @@ TerrainApp::TerrainApp()
 	psoDesc.SampleDesc = sampleDesc;
 	psoDesc.SampleMask = 0xffffffff;
 	psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
-	psoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
+	psoDesc.RasterizerState.FillMode = m_drawWireframe ? D3D12_FILL_MODE_WIREFRAME : D3D12_FILL_MODE_SOLID;
 	psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
 	psoDesc.NumRenderTargets = 1;
 	psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
@@ -529,7 +547,9 @@ TerrainApp::TerrainApp()
 		return;
 	}
 
-	const float PLANE_SIZE = 200.0f;
+	// ------------------------------------------------ Terrain Base Mesh Generation ------------------------------------------------
+
+	const float PLANE_SIZE = 400.0f;
 	const float QUAD_SIZE = 10.0f;
 	const int GRID_DIVISIONS = static_cast<int>(PLANE_SIZE / QUAD_SIZE); 
 
@@ -570,6 +590,8 @@ TerrainApp::TerrainApp()
 
 	m_vertexCount = static_cast<UINT>(vList.size());
 	m_indexCount = static_cast<UINT>(iList.size());
+
+	// ------------------------------------------------ Terrain Vertex/Index Buffers ------------------------------------------------
 
 	int vBufferSize = sizeof(Vertex) * vList.size();
 
@@ -642,6 +664,8 @@ TerrainApp::TerrainApp()
 	UpdateSubresources(m_commandList, m_indexBuffer, iBufferUploadHeap, 0, 0, 1, &indexData);
 
 	m_commandList->ResourceBarrier(1, &copyToVsBarrier);
+
+	// ------------------------------------------------ Terrain Test Texture ------------------------------------------------
 
 	Image groundTexture;
 	groundTexture.LoadImageFromFile("Assets/Ground.jpg");
@@ -728,6 +752,8 @@ TerrainApp::TerrainApp()
 		return;
 	}
 
+	// ------------------------------------------------ D3D12 Init Execute Commands ------------------------------------------------
+
 	m_commandList->Close();
 	ID3D12CommandList* ppCommandLists[] = { m_commandList };
 	m_commandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
@@ -760,10 +786,14 @@ TerrainApp::TerrainApp()
 	m_scissorRect.right = width;
 	m_scissorRect.bottom = height;
 
+	// ------------------------------------------------ App Init Data ------------------------------------------------
+
 	m_camera.SetPosition({ 0.0f, 6.0f, -5.0f });
 	m_camera.UpdatePerspectiveFOV(0.35f * 3.14159f, (float)width / (float)height);
 
 #if ENABLE_IMGUI
+
+	// ------------------------------------------------ ImGui Init ------------------------------------------------
 
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
@@ -837,6 +867,8 @@ void TerrainApp::Run()
 {
 	while (m_isRunning)
 	{
+		// ------------------------------------------------ App Update ------------------------------------------------
+
 		float time = static_cast<float>(clock()) - m_startTime;
 		float dt = (time - m_lastTime) / 1000.0f;
 		m_lastTime = time;
@@ -864,6 +896,8 @@ void TerrainApp::Run()
 
 		DirectX::XMStoreFloat4x4(&m_constantBuffer.viewProj, viewProj);
 		memcpy(m_constantBufferGPUAddress[m_frameIndex], &m_constantBuffer, sizeof(m_constantBuffer));
+
+		// ------------------------------------------------ D3D12 Commands ------------------------------------------------
 
 		HRESULT hr;
 
@@ -910,6 +944,8 @@ void TerrainApp::Run()
 
 #if ENABLE_IMGUI
 
+		// ------------------------------------------------ ImGui Commands ------------------------------------------------
+
 		m_commandList->OMSetRenderTargets(1, &rtvHandle, false, nullptr);
 
 		ImGui_ImplDX12_NewFrame();
@@ -918,9 +954,13 @@ void TerrainApp::Run()
 
 		ImGui::Begin("FrameRate");
 		ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+		ImGui::Text("Pre-tesselation Vertex Count: %d", m_vertexCount);
+		const int tessFactor = 64;
+		int baseTriangles = m_vertexCount / 3;
+		int tessVertexCount = baseTriangles * ((tessFactor + 1) * (tessFactor + 2) / 2);
+		ImGui::Text("Tessellated Vertex Count: %d", tessVertexCount);
 		ImGui::End();
 
-		// No need to switch heaps - ImGui uses the same heap with offset
 		ImGui::Render();
 		ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), m_commandList);
 
@@ -931,6 +971,8 @@ void TerrainApp::Run()
 		m_commandList->ResourceBarrier(1, &rtToPresentTransition);
 
 		hr = m_commandList->Close();
+
+		// ------------------------------------------------ Execute Commands & Present ------------------------------------------------
 
 		if (FAILED(hr))
 		{
@@ -993,6 +1035,8 @@ void TerrainApp::OnWindowResize(int width, int height)
 		m_depthStencilBuffer->Release();
 		m_depthStencilBuffer = nullptr;
 	}
+
+	// ------------------------------------------------ Resize RTVs & DSV ------------------------------------------------
 
 	HRESULT hr;
 
@@ -1063,6 +1107,8 @@ void TerrainApp::OnWindowResize(int width, int height)
 
 	m_device->CreateDepthStencilView(m_depthStencilBuffer, &depthStencilDesc, m_dsDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
 
+	// ------------------------------------------------ Resize VP & Update Camera ------------------------------------------------
+
 	m_viewport.Width = static_cast<float>(width);
 	m_viewport.Height = static_cast<float>(height);
 	m_scissorRect.right = width;
@@ -1093,6 +1139,8 @@ void TerrainApp::WaitForPreviousFrame()
 
 	m_fenceValues[m_frameIndex]++;
 }
+
+// ------------------------------------------------ Input Handling ------------------------------------------------
 
 void TerrainApp::OnMouseMove(Vec2 pos)
 {
@@ -1194,6 +1242,8 @@ void TerrainApp::UpdateInputs()
 		::memcpy(m_old_keys_state, m_keys_state, sizeof(unsigned char) * 256);
 	}
 }
+
+// ------------------------------------------------ stb Image Loading ------------------------------------------------
 
 TerrainApp::Image::~Image()
 {

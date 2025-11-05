@@ -32,6 +32,8 @@ private:
 
 	void WaitForPreviousFrame();
 
+	// ------------------------ Render Data Structures ------------------------
+
 	struct ConstantBuffer 
 	{
 		DirectX::XMFLOAT4X4 viewProj;
@@ -43,6 +45,8 @@ private:
 		DirectX::XMFLOAT2 uv;
 	};
 
+	// ------------------------ stb Image Loading ------------------------
+
 	struct Image 
 	{
 		~Image();
@@ -53,6 +57,8 @@ private:
 		int Width;
 		int Height;
 	};
+
+	// ------------------------ Input Handling ------------------------
 
 	struct Vec2
 	{
@@ -70,12 +76,16 @@ private:
 	void OnRightMouseUp(Vec2 pos);
 	void UpdateInputs();
 
-	bool m_maximizeAtStart = false;
 	bool m_isMouseLocked = true;
 	unsigned char m_keys_state[256] = {};
 	unsigned char m_old_keys_state[256] = {};
 	Vec2 m_lastMousePos = {};
 	bool m_first_time = true;
+
+	// ------------------------ App Global Settings ------------------------
+
+	bool m_drawWireframe = false;
+	bool m_maximizeAtStart = true;
 
 	HWND m_hwnd = nullptr;
 	bool m_isRunning = false;
@@ -87,6 +97,8 @@ private:
 	float m_cameraForward = 0.0f;
 	float m_cameraRight = 0.0f;
 	float m_cameraMoveSpeed = 16.0f;
+
+	// ------------------------ D3D12 ------------------------
 
 	ID3D12Device* m_device = nullptr;
 	IDXGISwapChain3* m_swapChain = nullptr;
@@ -119,6 +131,6 @@ private:
 	ID3D12Resource* m_textureBuffer = nullptr;
 	ID3D12Resource* m_textureBufferUploadHeap = nullptr;
 #if ENABLE_IMGUI
-	static const int IMGUI_DESCRIPTOR_OFFSET = 10; // Start ImGui descriptors at offset 10
+	static const int IMGUI_DESCRIPTOR_OFFSET = 10;
 #endif
 };
