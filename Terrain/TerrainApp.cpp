@@ -1,5 +1,6 @@
 #include "TerrainApp.h"
 #include <vector>
+#include "Include/stb/stb_image.h"
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
@@ -624,6 +625,9 @@ TerrainApp::TerrainApp()
 	m_camera.SetPosition({ 0.0f, 6.0f, -5.0f });
 	m_camera.UpdatePerspectiveFOV(0.35f * 3.14159f, (float)width / (float)height);
 
+	Image groundTexture;
+	groundTexture.LoadImageFromFile("Assets/Ground.jpg");
+
 	m_isRunning = true;
 }
 
@@ -896,4 +900,28 @@ void TerrainApp::UpdateInputs()
 		}
 		::memcpy(m_old_keys_state, m_keys_state, sizeof(unsigned char) * 256);
 	}
+}
+
+TerrainApp::Image::~Image()
+{
+	if (Bytes != nullptr)
+	{
+		delete[] Bytes;
+		Bytes = nullptr;
+	}
+}
+
+void TerrainApp::Image::LoadImageFromFile(const std::string& path, bool flip)
+{
+	int channels;
+
+	stbi_set_flip_vertically_on_load(flip);
+	Bytes = reinterpret_cast<char*>(stbi_load(path.c_str(), &Width, &Height, &channels, STBI_rgb_alpha));
+	if (!Bytes)
+	{
+		std::cout << "Failed to load image " + path << std::endl;
+		return;
+	}
+
+	std::cout << "Loaded image " + path << std::endl;
 }

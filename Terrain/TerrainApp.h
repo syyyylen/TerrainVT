@@ -28,13 +28,26 @@ private:
 
 	void WaitForPreviousFrame();
 
-	struct ConstantBuffer {
+	struct ConstantBuffer 
+	{
 		DirectX::XMFLOAT4X4 viewProj;
 	};
 
-	struct Vertex {
+	struct Vertex 
+	{
 		DirectX::XMFLOAT3 pos;
 		DirectX::XMFLOAT2 uv;
+	};
+
+	struct Image 
+	{
+		~Image();
+
+		void LoadImageFromFile(const std::string& path, bool flip = true);
+
+		char* Bytes = nullptr;
+		int Width;
+		int Height;
 	};
 
 	struct Vec2
