@@ -8,9 +8,14 @@
 #include "Include/ImGui/imgui.h"
 #endif
 
+extern LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
 	TerrainApp* app = reinterpret_cast<TerrainApp*>(::GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+
+	if (ImGui_ImplWin32_WndProcHandler(hwnd, msg, wParam, lParam))
+		return 1;
 
 	switch (msg)
 	{
@@ -274,7 +279,7 @@ TerrainApp::TerrainApp()
 	for (int i = 0; i < FRAMES_IN_FLIGHT; ++i)
 	{
 		D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
-		heapDesc.NumDescriptors = 2;
+		heapDesc.NumDescriptors = 100; // Unified heap: terrain descriptors (0-9) + ImGui descriptors (10+)
 		heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 		heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 		hr = m_device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&m_mainDescriptorHeap[i]));
@@ -771,12 +776,12 @@ TerrainApp::TerrainApp()
 
 	ImGui_ImplWin32_EnableDpiAwareness();
 	ImGui_ImplWin32_Init(m_hwnd);
-	ImGui_ImplDX12_Init(m_device, 
-		FRAMES_IN_FLIGHT, 
-		DXGI_FORMAT_R8G8B8A8_UNORM, 
-		m_mainDescriptorHeap[0], 
-		m_mainDescriptorHeap[0]->GetCPUDescriptorHandleForHeapStart(), 
-		m_mainDescriptorHeap[0]->GetGPUDescriptorHandleForHeapStart());
+	ImGui_ImplDX12_Init(m_device,
+		FRAMES_IN_FLIGHT,
+		DXGI_FORMAT_R8G8B8A8_UNORM,
+		m_mainDescriptorHeap[0],
+		CD3DX12_CPU_DESCRIPTOR_HANDLE(m_mainDescriptorHeap[0]->GetCPUDescriptorHandleForHeapStart(), IMGUI_DESCRIPTOR_OFFSET, descriptorSize),
+		CD3DX12_GPU_DESCRIPTOR_HANDLE(m_mainDescriptorHeap[0]->GetGPUDescriptorHandleForHeapStart(), IMGUI_DESCRIPTOR_OFFSET, descriptorSize));
 
 #endif
 
@@ -903,9 +908,9 @@ void TerrainApp::Run()
 		m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
 		m_commandList->DrawIndexedInstanced(m_indexCount, 1, 0, 0, 0);
 
-		m_commandList->OMSetRenderTargets(1, &rtvHandle, false, nullptr);
-
 #if ENABLE_IMGUI
+
+		m_commandList->OMSetRenderTargets(1, &rtvHandle, false, nullptr);
 
 		ImGui_ImplDX12_NewFrame();
 		ImGui_ImplWin32_NewFrame();
@@ -915,9 +920,7 @@ void TerrainApp::Run()
 		ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 		ImGui::End();
 
-		ID3D12DescriptorHeap* imguiHeaps[] = { m_mainDescriptorHeap[0]};
-		m_commandList->SetDescriptorHeaps(1, imguiHeaps);
-
+		// No need to switch heaps - ImGui uses the same heap with offset
 		ImGui::Render();
 		ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), m_commandList);
 

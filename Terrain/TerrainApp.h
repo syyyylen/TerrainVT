@@ -14,7 +14,7 @@
 
 #define FRAMES_IN_FLIGHT 3
 
-#define ENABLE_IMGUI 0
+#define ENABLE_IMGUI 1
 
 class TerrainApp 
 {
@@ -118,4 +118,7 @@ private:
 	UINT8* m_constantBufferGPUAddress[FRAMES_IN_FLIGHT] = {};
 	ID3D12Resource* m_textureBuffer = nullptr;
 	ID3D12Resource* m_textureBufferUploadHeap = nullptr;
+#if ENABLE_IMGUI
+	static const int IMGUI_DESCRIPTOR_OFFSET = 10; // Start ImGui descriptors at offset 10
+#endif
 };
