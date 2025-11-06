@@ -768,6 +768,17 @@ TerrainApp::TerrainApp()
 
 TerrainApp::~TerrainApp()
 {
+	for (int i = 0; i < FRAMES_IN_FLIGHT; ++i)
+	{
+		const UINT64 fenceToWaitFor = m_fenceValues[i];
+		m_commandQueue->Signal(m_fences[i], fenceToWaitFor);
+
+		if (m_fences[i]->GetCompletedValue() < fenceToWaitFor)
+		{
+			m_fences[i]->SetEventOnCompletion(fenceToWaitFor, m_fenceEvent);
+			WaitForSingleObject(m_fenceEvent, INFINITE);
+		}
+	}
 
 #if ENABLE_IMGUI
 	ImGui_ImplDX12_Shutdown();
