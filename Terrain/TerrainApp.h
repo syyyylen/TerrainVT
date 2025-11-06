@@ -55,6 +55,12 @@ private:
 	struct ConstantBuffer 
 	{
 		DirectX::XMFLOAT4X4 viewProj;
+		float noise_persistence = 0.5f;
+		float noise_lacunarity = 2.0f;
+		float noise_scale = 3.0f;
+		float noise_height = 25.0f;
+		int noise_octaves = 6;
+		DirectX::XMFLOAT3 padding;
 	};
 
 	struct Vertex 

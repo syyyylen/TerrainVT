@@ -739,6 +739,12 @@ TerrainApp::TerrainApp()
 	m_camera.SetPosition({ 0.0f, 6.0f, -5.0f });
 	m_camera.UpdatePerspectiveFOV(0.35f * 3.14159f, (float)width / (float)height);
 
+	m_constantBuffer.noise_persistence = 0.5f;
+	m_constantBuffer.noise_lacunarity = 2.0f;
+	m_constantBuffer.noise_scale = 3.0f;
+	m_constantBuffer.noise_height = 25.0f;
+	m_constantBuffer.noise_octaves = 6;
+
 #if ENABLE_IMGUI
 
 	// ------------------------------------------------ ImGui Init ------------------------------------------------
@@ -854,6 +860,7 @@ void TerrainApp::Run()
 		DirectX::XMMATRIX viewProj = view * proj;
 
 		DirectX::XMStoreFloat4x4(&m_constantBuffer.viewProj, viewProj);
+
 		memcpy(m_constantBufferGPUAddress[m_frameIndex], &m_constantBuffer, sizeof(m_constantBuffer));
 
 		// ------------------------------------------------ D3D12 Commands ------------------------------------------------
@@ -918,6 +925,14 @@ void TerrainApp::Run()
 		int baseTriangles = m_vertexCount / 3;
 		int tessVertexCount = baseTriangles * ((tessFactor + 1) * (tessFactor + 2) / 2);
 		ImGui::Text("Tessellated Vertex Count: %d", tessVertexCount);
+		ImGui::End();
+
+		ImGui::Begin("Noise Settings");
+		ImGui::SliderFloat("Persistence", &m_constantBuffer.noise_persistence, 0.0f, 1.0f);
+		ImGui::SliderFloat("Lacunarity", &m_constantBuffer.noise_lacunarity, 1.0f, 4.0f);
+		ImGui::SliderFloat("Scale", &m_constantBuffer.noise_scale, 0.1f, 10.0f);
+		ImGui::SliderFloat("Height", &m_constantBuffer.noise_height, 1.0f, 100.0f);
+		ImGui::SliderInt("Octaves", &m_constantBuffer.noise_octaves, 1, 12);
 		ImGui::End();
 
 		ImGui::Render();
