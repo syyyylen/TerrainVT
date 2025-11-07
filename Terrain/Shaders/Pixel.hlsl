@@ -6,6 +6,9 @@ struct DSOutput
     float3 worldPos : TEXCOORD1;
 };
 
+Texture2D diffuseTexture : register(t0);
+SamplerState s1 : register(s0);
+
 float4 main(DSOutput input) : SV_TARGET
 {
     float ambient = 0.2;
@@ -14,5 +17,7 @@ float4 main(DSOutput input) : SV_TARGET
     float diffuse = saturate(dot(n, l));
     float lighting = ambient + diffuse * (1.0 - ambient);
     
-    return float4(lighting, lighting, lighting, 1.0f);
+    float3 finalColor = diffuseTexture.Sample(s1, input.uv * 20.0f).rgb * lighting;
+    
+    return float4(finalColor, 1.0f);
 }

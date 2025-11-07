@@ -392,10 +392,10 @@ TerrainApp::TerrainApp()
 	rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 
 	D3D12_STATIC_SAMPLER_DESC sampler = {};
-	sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
-	sampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
-	sampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
-	sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
+	sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+	sampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	sampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
 	sampler.MipLODBias = 0;
 	sampler.MaxAnisotropy = 0;
 	sampler.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
@@ -615,14 +615,14 @@ TerrainApp::TerrainApp()
 
 	// ------------------------------------------------ Terrain Test Texture ------------------------------------------------
 
-	Image groundTexture;
-	groundTexture.LoadImageFromFile("Assets/Heightmap.png");
+	Image texture;
+	texture.LoadImageFromFile("Assets/grass_albedo.png");
 
 	D3D12_RESOURCE_DESC textureDesc = {};
 	textureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
 	textureDesc.Alignment = 0;
-	textureDesc.Width = groundTexture.Width;
-	textureDesc.Height = groundTexture.Height;
+	textureDesc.Width = texture.Width;
+	textureDesc.Height = texture.Height;
 	textureDesc.DepthOrArraySize = 1;
 	textureDesc.MipLevels = 1;
 	textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -667,9 +667,9 @@ TerrainApp::TerrainApp()
 	m_textureBufferUploadHeap->SetName(L"Texture Buffer Upload Resource Heap");
 
 	D3D12_SUBRESOURCE_DATA textureData = {};
-	textureData.pData = groundTexture.Bytes;
-	textureData.RowPitch = groundTexture.Width * 4;
-	textureData.SlicePitch = groundTexture.Width * 4 * textureDesc.Height;
+	textureData.pData = texture.Bytes;
+	textureData.RowPitch = texture.Width * 4;
+	textureData.SlicePitch = texture.Width * 4 * textureDesc.Height;
 
 	UpdateSubresources(m_commandList, m_textureBuffer, m_textureBufferUploadHeap, 0, 0, 1, &textureData);
 
@@ -740,11 +740,13 @@ TerrainApp::TerrainApp()
 	m_camera.UpdatePerspectiveFOV(0.35f * 3.14159f, (float)width / (float)height);
 
 #if PERLIN_NOISE
+
 	m_constantBuffer.noise_persistence = 0.38f;
 	m_constantBuffer.noise_lacunarity = 2.6f;
 	m_constantBuffer.noise_scale = 3.0f;
 	m_constantBuffer.noise_height = 80.0f;
 	m_constantBuffer.noise_octaves = 5;
+
 #endif
 
 #if ENABLE_IMGUI
@@ -789,9 +791,11 @@ TerrainApp::~TerrainApp()
 	}
 
 #if ENABLE_IMGUI
+
 	ImGui_ImplDX12_Shutdown();
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
+
 #endif
 
 	if (m_device)
@@ -930,6 +934,7 @@ void TerrainApp::Run()
 		ImGui::End();
 
 #if PERLIN_NOISE
+
 		ImGui::Begin("Perlin Noise Settings");
 		ImGui::SliderFloat("Persistence", &m_constantBuffer.noise_persistence, 0.0f, 1.0f);
 		ImGui::SliderFloat("Lacunarity", &m_constantBuffer.noise_lacunarity, 1.0f, 6.0f);
@@ -937,6 +942,7 @@ void TerrainApp::Run()
 		ImGui::SliderFloat("Height", &m_constantBuffer.noise_height, 1.0f, 150.0f);
 		ImGui::SliderInt("Octaves", &m_constantBuffer.noise_octaves, 1, 8);
 		ImGui::End();
+
 #endif
 
 		ImGui::Render();
