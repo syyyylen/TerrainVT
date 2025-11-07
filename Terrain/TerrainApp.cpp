@@ -377,7 +377,11 @@ TerrainApp::TerrainApp()
 	descriptorTableRanges[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
 	descriptorTableRanges[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-	descriptorTableRanges[1].NumDescriptors = 2;  // Changed to 2 for terrain texture + compute output texture
+#if RUNTIME_PERLIN_NOISE
+	descriptorTableRanges[1].NumDescriptors = 2;
+#else
+	descriptorTableRanges[1].NumDescriptors = 1;
+#endif
 	descriptorTableRanges[1].BaseShaderRegister = 0;
 	descriptorTableRanges[1].RegisterSpace = 0;
 	descriptorTableRanges[1].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
@@ -451,7 +455,11 @@ TerrainApp::TerrainApp()
 
 
 	ShaderData domainShaderData = {};
-	CompileShaderFromFile("Shaders/Domain.hlsl", ShaderType::Domain, domainShaderData);
+#if RUNTIME_PERLIN_NOISE
+	CompileShaderFromFile("Shaders/Domain.hlsl", ShaderType::Domain, domainShaderData, {{L"USE_PERLIN_NOISE", L"1"}});
+#else
+	CompileShaderFromFile("Shaders/Domain.hlsl", ShaderType::Domain, domainShaderData, {{L"USE_PERLIN_NOISE", L"0"}});
+#endif
 
 	D3D12_SHADER_BYTECODE domainShaderBytecode = {};
 	domainShaderBytecode.BytecodeLength = domainShaderData.bytecode.size() * sizeof(uint32_t);
@@ -494,6 +502,8 @@ TerrainApp::TerrainApp()
 	{
 		return;
 	}
+
+#if RUNTIME_PERLIN_NOISE
 
 	// ------------------------------------------------ D3D12 Init (Compute Pipeline) ------------------------------------------------
 
@@ -564,6 +574,8 @@ TerrainApp::TerrainApp()
 	 {
 	 	return;
 	 }
+
+#endif
 
 	// ------------------------------------------------ Terrain Base Mesh Generation ------------------------------------------------
 
@@ -759,7 +771,7 @@ TerrainApp::TerrainApp()
 	{
 		CD3DX12_CPU_DESCRIPTOR_HANDLE srvHandle(
 			m_mainDescriptorHeap[i]->GetCPUDescriptorHandleForHeapStart(),
-			1,  // Offset 1: terrain texture SRV (t0)
+			1,
 			descriptorSize);
 
 		m_device->CreateShaderResourceView(m_textureBuffer, &srvDesc, srvHandle);
@@ -769,6 +781,8 @@ TerrainApp::TerrainApp()
 	{
 		return;
 	}
+
+#if RUNTIME_PERLIN_NOISE
 
 	// ------------------------------------------------ Compute Shader Resources ------------------------------------------------
 
@@ -837,6 +851,8 @@ TerrainApp::TerrainApp()
 		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 	m_commandList->ResourceBarrier(1, &computeToSrvBarrier);
 
+#endif
+
 	// ------------------------------------------------ D3D12 Init Execute Commands ------------------------------------------------
 
 	m_commandList->Close();
@@ -876,7 +892,7 @@ TerrainApp::TerrainApp()
 	m_camera.SetPosition({ 0.0f, 6.0f, -5.0f });
 	m_camera.UpdatePerspectiveFOV(0.35f * 3.14159f, (float)width / (float)height);
 
-#if PERLIN_NOISE
+#if RUNTIME_PERLIN_NOISE
 
 	m_constantBuffer.noise_persistence = 0.38f;
 	m_constantBuffer.noise_lacunarity = 2.6f;
@@ -1070,7 +1086,7 @@ void TerrainApp::Run()
 		ImGui::Text("Tessellated Vertex Count: %d", tessVertexCount);
 		ImGui::End();
 
-#if PERLIN_NOISE
+#if RUNTIME_PERLIN_NOISE
 
 		ImGui::Begin("Perlin Noise Settings");
 		ImGui::SliderFloat("Persistence", &m_constantBuffer.noise_persistence, 0.0f, 1.0f);
@@ -1309,7 +1325,7 @@ void TerrainApp::WaitForPreviousFrame()
 
 // ------------------------------------------------ DXC Shader Compilation ------------------------------------------------
 
-void TerrainApp::CompileShaderFromFile(const std::string& path, ShaderType shaderType, ShaderData& outShaderData)
+void TerrainApp::CompileShaderFromFile(const std::string& path, ShaderType shaderType, ShaderData& outShaderData, const std::vector<std::pair<std::wstring, std::wstring>>& defines)
 {
 	std::ifstream file(path, std::ios::binary);
 	if (!file)
@@ -1336,7 +1352,7 @@ void TerrainApp::CompileShaderFromFile(const std::string& path, ShaderType shade
 	if (FAILED(hr))
 	{
 		return;
-	}	
+	}
 
 	hr = dxcUtils->CreateBlob(shaderData.data(), shaderData.size(), 0, &sourceBlob);
 
@@ -1388,6 +1404,12 @@ void TerrainApp::CompileShaderFromFile(const std::string& path, ShaderType shade
 		L"-Fre"
 	};
 
+	std::vector<DxcDefine> dxcDefines;
+	for (const auto& def : defines)
+	{
+		dxcDefines.push_back({ def.first.c_str(), def.second.c_str() });
+	}
+
 	IDxcOperationResult* result;
 
 	hr = compiler->Compile(
@@ -1397,8 +1419,8 @@ void TerrainApp::CompileShaderFromFile(const std::string& path, ShaderType shade
 		wideTarget,
 		args,
 		ARRAYSIZE(args),
-		nullptr,
-		0,
+		dxcDefines.empty() ? nullptr : dxcDefines.data(),
+		dxcDefines.empty() ? 0 : (UINT32)dxcDefines.size(),
 		defaultIncludeHandler,
 		&result);
 

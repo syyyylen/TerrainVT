@@ -1,5 +1,3 @@
-#define USE_PERLIN_NOISE 1
-
 #if USE_PERLIN_NOISE
 
 static const int p[512] =

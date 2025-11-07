@@ -16,7 +16,7 @@
 
 #define ENABLE_IMGUI 1
 
-#define PERLIN_NOISE 1
+#define RUNTIME_PERLIN_NOISE 1
 
 class TerrainApp 
 {
@@ -50,14 +50,14 @@ private:
 		std::vector<uint32_t> bytecode;
 	};
 
-	void CompileShaderFromFile(const std::string& path, ShaderType shaderType, ShaderData& outShaderData);
+	void CompileShaderFromFile(const std::string& path, ShaderType shaderType, ShaderData& outShaderData, const std::vector<std::pair<std::wstring, std::wstring>>& defines = {});
 
 	// ------------------------ Render Data Structures ------------------------
 
 	struct ConstantBuffer 
 	{
 		DirectX::XMFLOAT4X4 viewProj;
-#if PERLIN_NOISE
+#if RUNTIME_PERLIN_NOISE
 		float noise_persistence;
 		float noise_lacunarity;
 		float noise_scale;
@@ -158,8 +158,6 @@ private:
 	UINT8* m_constantBufferGPUAddress[FRAMES_IN_FLIGHT] = {};
 	ID3D12Resource* m_textureBuffer = nullptr;
 	ID3D12Resource* m_textureBufferUploadHeap = nullptr;
-
-	// Compute Pipeline
 	ID3D12RootSignature* m_computeRootSignature = nullptr;
 	ID3D12PipelineState* m_computePipelineState = nullptr;
 	ID3D12Resource* m_computeOutputTexture = nullptr;
