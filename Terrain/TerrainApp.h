@@ -16,6 +16,8 @@
 
 #define ENABLE_IMGUI 1
 
+#define PERLIN_NOISE 1
+
 class TerrainApp 
 {
 public:
@@ -55,12 +57,14 @@ private:
 	struct ConstantBuffer 
 	{
 		DirectX::XMFLOAT4X4 viewProj;
+#if PERLIN_NOISE
 		float noise_persistence = 0.5f;
 		float noise_lacunarity = 2.0f;
 		float noise_scale = 3.0f;
 		float noise_height = 25.0f;
 		int noise_octaves = 6;
 		DirectX::XMFLOAT3 padding;
+#endif
 	};
 
 	struct Vertex 
@@ -120,7 +124,7 @@ private:
 	Camera m_camera = {};
 	float m_cameraForward = 0.0f;
 	float m_cameraRight = 0.0f;
-	float m_cameraMoveSpeed = 16.0f;
+	float m_cameraMoveSpeed = 80.0f;
 
 	// ------------------------ D3D12 ------------------------
 

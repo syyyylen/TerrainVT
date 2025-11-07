@@ -1,34 +1,6 @@
-struct HSConstantOutput
-{
-    float edges[3] : SV_TessFactor;
-    float inside : SV_InsideTessFactor;
-};
+#define USE_PERLIN_NOISE 1
 
-struct HSOutput
-{
-    float3 pos : POSITION;
-    float2 uv : TEXCOORD0;
-};
-
-struct DSOutput
-{
-    float4 pos : SV_POSITION;
-    float2 uv : TEXCOORD0;
-};
-
-cbuffer ConstantBuffer : register(b0)
-{
-    row_major float4x4 viewProj;
-    float noise_persistence;
-    float noise_lacunarity;
-    float noise_scale;
-    float noise_height;
-    int noise_octaves;
-    float3 padding;
-};
-
-Texture2D t1 : register(t0);
-SamplerState s1 : register(s0);
+#if USE_PERLIN_NOISE
 
 static const int p[512] =
 {
@@ -118,6 +90,39 @@ float fbm(float x, float y, int octaves, float persistence, float lacunarity)
     return total / maxValue;
 }
 
+#endif
+
+struct HSConstantOutput
+{
+    float edges[3] : SV_TessFactor;
+    float inside : SV_InsideTessFactor;
+};
+
+struct HSOutput
+{
+    float3 pos : POSITION;
+    float2 uv : TEXCOORD0;
+};
+
+struct DSOutput
+{
+    float4 pos : SV_POSITION;
+    float2 uv : TEXCOORD0;
+};
+
+cbuffer ConstantBuffer : register(b0)
+{
+    row_major float4x4 viewProj;
+#if USE_PERLIN_NOISE
+    float noise_persistence;
+    float noise_lacunarity;
+    float noise_scale;
+    float noise_height;
+    int noise_octaves;
+    float3 padding;
+#endif
+};
+
 [domain("tri")]
 DSOutput main(HSConstantOutput input, float3 bary : SV_DomainLocation, const OutputPatch<HSOutput, 3> patch)
 {
@@ -127,13 +132,14 @@ DSOutput main(HSConstantOutput input, float3 bary : SV_DomainLocation, const Out
     
     output.uv = patch[0].uv * bary.x + patch[1].uv * bary.y + patch[2].uv * bary.z;
     
+#if USE_PERLIN_NOISE
+    
     float scale = noise_scale;
     float noise = fbm(output.uv.x * scale, output.uv.y * scale, noise_octaves, noise_persistence, noise_lacunarity);
-    
-    // float height = t1.SampleLevel(s1, output.uv, 0).r * 25.0f;
-    // pos.y += height;
-    
+
     pos.y += noise * noise_height;
+
+#endif
     
     output.pos = mul(float4(pos, 1.0f), viewProj);
     

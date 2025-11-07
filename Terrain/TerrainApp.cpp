@@ -739,11 +739,13 @@ TerrainApp::TerrainApp()
 	m_camera.SetPosition({ 0.0f, 6.0f, -5.0f });
 	m_camera.UpdatePerspectiveFOV(0.35f * 3.14159f, (float)width / (float)height);
 
-	m_constantBuffer.noise_persistence = 0.5f;
+#if PERLIN_NOISE
+	m_constantBuffer.noise_persistence = 0.38f;
 	m_constantBuffer.noise_lacunarity = 2.0f;
 	m_constantBuffer.noise_scale = 3.0f;
-	m_constantBuffer.noise_height = 25.0f;
+	m_constantBuffer.noise_height = 80.0f;
 	m_constantBuffer.noise_octaves = 6;
+#endif
 
 #if ENABLE_IMGUI
 
@@ -927,13 +929,15 @@ void TerrainApp::Run()
 		ImGui::Text("Tessellated Vertex Count: %d", tessVertexCount);
 		ImGui::End();
 
-		ImGui::Begin("Noise Settings");
+#if PERLIN_NOISE
+		ImGui::Begin("Perlin Noise Settings");
 		ImGui::SliderFloat("Persistence", &m_constantBuffer.noise_persistence, 0.0f, 1.0f);
-		ImGui::SliderFloat("Lacunarity", &m_constantBuffer.noise_lacunarity, 1.0f, 4.0f);
+		ImGui::SliderFloat("Lacunarity", &m_constantBuffer.noise_lacunarity, 1.0f, 6.0f);
 		ImGui::SliderFloat("Scale", &m_constantBuffer.noise_scale, 0.1f, 10.0f);
-		ImGui::SliderFloat("Height", &m_constantBuffer.noise_height, 1.0f, 100.0f);
-		ImGui::SliderInt("Octaves", &m_constantBuffer.noise_octaves, 1, 12);
+		ImGui::SliderFloat("Height", &m_constantBuffer.noise_height, 1.0f, 150.0f);
+		ImGui::SliderInt("Octaves", &m_constantBuffer.noise_octaves, 1, 8);
 		ImGui::End();
+#endif
 
 		ImGui::Render();
 		ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), m_commandList);
