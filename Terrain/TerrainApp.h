@@ -1,5 +1,6 @@
 #pragma once
 
+#define NOMINMAX
 #include <windows.h>
 #include <iostream>
 #include <iomanip>
@@ -51,6 +52,10 @@ private:
 	};
 
 	void CompileShaderFromFile(const std::string& path, ShaderType shaderType, ShaderData& outShaderData, const std::vector<std::pair<std::wstring, std::wstring>>& defines = {});
+
+#if RUNTIME_PERLIN_NOISE
+	void SaveHeightmapToPNG(const std::string& filepath);
+#endif
 
 	// ------------------------ Render Data Structures ------------------------
 
@@ -161,6 +166,8 @@ private:
 	ID3D12RootSignature* m_computeRootSignature = nullptr;
 	ID3D12PipelineState* m_computePipelineState = nullptr;
 	ID3D12Resource* m_computeOutputTexture = nullptr;
+	ID3D12Resource* m_heightmapReadbackBuffer = nullptr;
+	bool m_saveHeightmapAfterFrame = false;
 
 #if ENABLE_IMGUI
 	static const int IMGUI_DESCRIPTOR_OFFSET = 10;

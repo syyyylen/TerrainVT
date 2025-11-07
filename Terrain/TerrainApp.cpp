@@ -1,7 +1,9 @@
 #include "TerrainApp.h"
 #include <dxcapi.h>
 #include <fstream>
+#include <algorithm>
 #include "Include/stb/stb_image.h"
+#include "Include/stb/stb_image_write.h"
 
 #if ENABLE_IMGUI
 #include "Include/ImGui/imgui_impl_dx12.h"
@@ -845,6 +847,26 @@ TerrainApp::TerrainApp()
 		m_device->CreateUnorderedAccessView(m_computeOutputTexture, nullptr, &uavDesc, uavHandle);
 	}
 
+	// Create readback buffer for saving heightmap
+	UINT64 readbackBufferSize = 1080 * 1080 * 4; // R32_FLOAT = 4 bytes per pixel
+	CD3DX12_HEAP_PROPERTIES readbackHeapProps(D3D12_HEAP_TYPE_READBACK);
+	CD3DX12_RESOURCE_DESC readbackBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(readbackBufferSize);
+
+	hr = m_device->CreateCommittedResource(
+		&readbackHeapProps,
+		D3D12_HEAP_FLAG_NONE,
+		&readbackBufferDesc,
+		D3D12_RESOURCE_STATE_COPY_DEST,
+		nullptr,
+		IID_PPV_ARGS(&m_heightmapReadbackBuffer));
+
+	if (FAILED(hr))
+	{
+		return;
+	}
+
+	m_heightmapReadbackBuffer->SetName(L"Heightmap Readback Buffer");
+
 	CD3DX12_RESOURCE_BARRIER computeToSrvBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
 		m_computeOutputTexture,
 		D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
@@ -983,6 +1005,20 @@ TerrainApp::~TerrainApp()
 		if (m_fences[i])
 			m_fences[i]->Release();
 	};
+
+#if RUNTIME_PERLIN_NOISE
+	if (m_computeOutputTexture)
+		m_computeOutputTexture->Release();
+
+	if (m_heightmapReadbackBuffer)
+		m_heightmapReadbackBuffer->Release();
+
+	if (m_computePipelineState)
+		m_computePipelineState->Release();
+
+	if (m_computeRootSignature)
+		m_computeRootSignature->Release();
+#endif
 
 	::DestroyWindow(m_hwnd);
 }
@@ -1125,11 +1161,36 @@ void TerrainApp::Run()
 
 			m_commandList->Dispatch(135, 135, 1);
 
-			CD3DX12_RESOURCE_BARRIER uavToSrvBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
+			CD3DX12_RESOURCE_BARRIER uavToCopyBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
 				m_computeOutputTexture,
 				D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+				D3D12_RESOURCE_STATE_COPY_SOURCE);
+			m_commandList->ResourceBarrier(1, &uavToCopyBarrier);
+
+			D3D12_TEXTURE_COPY_LOCATION srcLocation = {};
+			srcLocation.pResource = m_computeOutputTexture;
+			srcLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+			srcLocation.SubresourceIndex = 0;
+
+			D3D12_TEXTURE_COPY_LOCATION dstLocation = {};
+			dstLocation.pResource = m_heightmapReadbackBuffer;
+			dstLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+			dstLocation.PlacedFootprint.Offset = 0;
+			dstLocation.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R32_FLOAT;
+			dstLocation.PlacedFootprint.Footprint.Width = 1080;
+			dstLocation.PlacedFootprint.Footprint.Height = 1080;
+			dstLocation.PlacedFootprint.Footprint.Depth = 1;
+			dstLocation.PlacedFootprint.Footprint.RowPitch = 1080 * 4;
+
+			m_commandList->CopyTextureRegion(&dstLocation, 0, 0, 0, &srcLocation, nullptr);
+
+			CD3DX12_RESOURCE_BARRIER copyToSrvBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
+				m_computeOutputTexture,
+				D3D12_RESOURCE_STATE_COPY_SOURCE,
 				D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-			m_commandList->ResourceBarrier(1, &uavToSrvBarrier);
+			m_commandList->ResourceBarrier(1, &copyToSrvBarrier);
+
+			m_saveHeightmapAfterFrame = true;
 		}
 
 		CD3DX12_GPU_DESCRIPTOR_HANDLE srvGpuHandle(
@@ -1137,7 +1198,7 @@ void TerrainApp::Run()
 			2,
 			descriptorSize);
 
-		ImGui::Image((ImTextureID)srvGpuHandle.ptr, ImVec2(1080, 1080));
+		ImGui::Image((ImTextureID)srvGpuHandle.ptr, ImVec2(540, 540));
 
 		ImGui::End();
 
@@ -1179,6 +1240,20 @@ void TerrainApp::Run()
 		{
 			return;
 		}
+
+#if RUNTIME_PERLIN_NOISE
+		if (m_saveHeightmapAfterFrame)
+		{
+			if (m_fences[m_frameIndex]->GetCompletedValue() < m_fenceValues[m_frameIndex])
+			{
+				m_fences[m_frameIndex]->SetEventOnCompletion(m_fenceValues[m_frameIndex], m_fenceEvent);
+				WaitForSingleObject(m_fenceEvent, INFINITE);
+			}
+
+			SaveHeightmapToPNG("Assets/HeightMap.png");
+			m_saveHeightmapAfterFrame = false;
+		}
+#endif
 	}
 }
 
@@ -1579,3 +1654,55 @@ void TerrainApp::Image::LoadImageFromFile(const std::string& path, bool flip)
 
 	std::cout << "Loaded image " + path << std::endl;
 }
+
+#if RUNTIME_PERLIN_NOISE
+
+// ------------------------------------------------ Heightmap Saving ------------------------------------------------
+
+void TerrainApp::SaveHeightmapToPNG(const std::string& filepath)
+{
+	void* pData = nullptr;
+	D3D12_RANGE readRange = { 0, 1080 * 1080 * 4 };
+	HRESULT hr = m_heightmapReadbackBuffer->Map(0, &readRange, &pData);
+
+	if (FAILED(hr))
+	{
+		std::cout << "Failed to map readback buffer" << std::endl;
+		return;
+	}
+
+	float* floatData = static_cast<float*>(pData);
+	std::vector<unsigned char> imageData(1080 * 1080);
+
+	float minHeight = floatData[0];
+	float maxHeight = floatData[0];
+	for (int i = 0; i < 1080 * 1080; i++)
+	{
+		minHeight = std::min(minHeight, floatData[i]);
+		maxHeight = std::max(maxHeight, floatData[i]);
+	}
+
+	float range = maxHeight - minHeight;
+	if (range < 0.0001f) range = 1.0f;
+
+	for (int i = 0; i < 1080 * 1080; i++)
+	{
+		float normalized = (floatData[i] - minHeight) / range;
+		imageData[i] = static_cast<unsigned char>(normalized * 255.0f);
+	}
+
+	D3D12_RANGE writeRange = { 0, 0 };
+	m_heightmapReadbackBuffer->Unmap(0, &writeRange);
+
+	stbi_flip_vertically_on_write(true);
+	if (stbi_write_png(filepath.c_str(), 1080, 1080, 1, imageData.data(), 1080))
+	{
+		std::cout << "Heightmap saved successfully to " << filepath << std::endl;
+	}
+	else
+	{
+		std::cout << "Failed to write heightmap to " << filepath << std::endl;
+	}
+}
+
+#endif
