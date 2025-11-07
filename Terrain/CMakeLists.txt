@@ -36,6 +36,13 @@ set_source_files_properties( Shaders/Domain.hlsl PROPERTIES
     VS_TOOL_OVERRIDE "None"
 )
 
+set_source_files_properties( Shaders/Domain.hlsl PROPERTIES 
+    VS_SHADER_TYPE Compute
+    VS_SHADER_MODEL 6.0
+    VS_SHADER_OBJECT_FILE_NAME ""
+    VS_TOOL_OVERRIDE "None"
+)
+
 # Add source to this project's executable
 add_executable(Terrain 
 "Main.cpp" 

@@ -158,6 +158,12 @@ private:
 	UINT8* m_constantBufferGPUAddress[FRAMES_IN_FLIGHT] = {};
 	ID3D12Resource* m_textureBuffer = nullptr;
 	ID3D12Resource* m_textureBufferUploadHeap = nullptr;
+
+	// Compute Pipeline
+	ID3D12RootSignature* m_computeRootSignature = nullptr;
+	ID3D12PipelineState* m_computePipelineState = nullptr;
+	ID3D12Resource* m_computeOutputTexture = nullptr;
+
 #if ENABLE_IMGUI
 	static const int IMGUI_DESCRIPTOR_OFFSET = 10;
 #endif
