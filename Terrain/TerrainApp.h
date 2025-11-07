@@ -58,11 +58,11 @@ private:
 	{
 		DirectX::XMFLOAT4X4 viewProj;
 #if PERLIN_NOISE
-		float noise_persistence = 0.5f;
-		float noise_lacunarity = 2.0f;
-		float noise_scale = 3.0f;
-		float noise_height = 25.0f;
-		int noise_octaves = 6;
+		float noise_persistence;
+		float noise_lacunarity;
+		float noise_scale;
+		float noise_height;
+		int noise_octaves;
 		DirectX::XMFLOAT3 padding;
 #endif
 	};

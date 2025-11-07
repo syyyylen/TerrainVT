@@ -108,6 +108,8 @@ struct DSOutput
 {
     float4 pos : SV_POSITION;
     float2 uv : TEXCOORD0;
+    float3 normal : NORMAL;
+    float3 worldPos : TEXCOORD1;
 };
 
 cbuffer ConstantBuffer : register(b0)
@@ -136,11 +138,28 @@ DSOutput main(HSConstantOutput input, float3 bary : SV_DomainLocation, const Out
     
     float scale = noise_scale;
     float noise = fbm(output.uv.x * scale, output.uv.y * scale, noise_octaves, noise_persistence, noise_lacunarity);
-
+    
     pos.y += noise * noise_height;
-
+    
+    float delta = 0.01;
+    
+    float heightL = fbm((output.uv.x - delta) * scale, output.uv.y * scale, noise_octaves, noise_persistence, noise_lacunarity) * noise_height;
+    float heightR = fbm((output.uv.x + delta) * scale, output.uv.y * scale, noise_octaves, noise_persistence, noise_lacunarity) * noise_height;
+    float heightD = fbm(output.uv.x * scale, (output.uv.y - delta) * scale, noise_octaves, noise_persistence, noise_lacunarity) * noise_height;
+    float heightU = fbm(output.uv.x * scale, (output.uv.y + delta) * scale, noise_octaves, noise_persistence, noise_lacunarity) * noise_height;
+    
+    float3 tangentX = float3(2.0 * delta, heightR - heightL, 0.0);
+    float3 tangentZ = float3(0.0, heightU - heightD, 2.0 * delta);
+    
+    output.normal = normalize(cross(tangentZ, tangentX));
+    
+#else
+    
+    output.normal = float3(0.0, 1.0, 0.0);
+    
 #endif
     
+    output.worldPos = pos;
     output.pos = mul(float4(pos, 1.0f), viewProj);
     
     return output;

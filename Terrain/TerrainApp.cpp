@@ -741,10 +741,10 @@ TerrainApp::TerrainApp()
 
 #if PERLIN_NOISE
 	m_constantBuffer.noise_persistence = 0.38f;
-	m_constantBuffer.noise_lacunarity = 2.0f;
+	m_constantBuffer.noise_lacunarity = 2.6f;
 	m_constantBuffer.noise_scale = 3.0f;
 	m_constantBuffer.noise_height = 80.0f;
-	m_constantBuffer.noise_octaves = 6;
+	m_constantBuffer.noise_octaves = 5;
 #endif
 
 #if ENABLE_IMGUI
