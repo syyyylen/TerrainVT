@@ -497,21 +497,36 @@ TerrainApp::TerrainApp()
 
 	// ------------------------------------------------ D3D12 Init (Compute Pipeline) ------------------------------------------------
 
-	D3D12_DESCRIPTOR_RANGE computeDescriptorRanges[1];
-	computeDescriptorRanges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
-	computeDescriptorRanges[0].NumDescriptors = 1;
-	computeDescriptorRanges[0].BaseShaderRegister = 0;
-	computeDescriptorRanges[0].RegisterSpace = 0;
-	computeDescriptorRanges[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+	D3D12_DESCRIPTOR_RANGE computeCBVRange;
+	computeCBVRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
+	computeCBVRange.NumDescriptors = 1;
+	computeCBVRange.BaseShaderRegister = 0;
+	computeCBVRange.RegisterSpace = 0;
+	computeCBVRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-	D3D12_ROOT_DESCRIPTOR_TABLE computeDescriptorTable;
-	computeDescriptorTable.NumDescriptorRanges = _countof(computeDescriptorRanges);
-	computeDescriptorTable.pDescriptorRanges = &computeDescriptorRanges[0];
+	D3D12_DESCRIPTOR_RANGE computeUAVRange;
+	computeUAVRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+	computeUAVRange.NumDescriptors = 1;
+	computeUAVRange.BaseShaderRegister = 0;
+	computeUAVRange.RegisterSpace = 0;
+	computeUAVRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-	D3D12_ROOT_PARAMETER computeRootParameters[1];
+	D3D12_ROOT_DESCRIPTOR_TABLE computeCBVTable;
+	computeCBVTable.NumDescriptorRanges = 1;
+	computeCBVTable.pDescriptorRanges = &computeCBVRange;
+
+	D3D12_ROOT_DESCRIPTOR_TABLE computeUAVTable;
+	computeUAVTable.NumDescriptorRanges = 1;
+	computeUAVTable.pDescriptorRanges = &computeUAVRange;
+
+	D3D12_ROOT_PARAMETER computeRootParameters[2];
 	computeRootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-	computeRootParameters[0].DescriptorTable = computeDescriptorTable;
+	computeRootParameters[0].DescriptorTable = computeCBVTable;
 	computeRootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+
+	computeRootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	computeRootParameters[1].DescriptorTable = computeUAVTable;
+	computeRootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 
 	CD3DX12_ROOT_SIGNATURE_DESC computeRootSignatureDesc;
 	computeRootSignatureDesc.Init(_countof(computeRootParameters), computeRootParameters, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_NONE);
@@ -744,7 +759,7 @@ TerrainApp::TerrainApp()
 	{
 		CD3DX12_CPU_DESCRIPTOR_HANDLE srvHandle(
 			m_mainDescriptorHeap[i]->GetCPUDescriptorHandleForHeapStart(),
-			1,
+			1,  // Offset 1: terrain texture SRV (t0)
 			descriptorSize);
 
 		m_device->CreateShaderResourceView(m_textureBuffer, &srvDesc, srvHandle);
@@ -790,16 +805,6 @@ TerrainApp::TerrainApp()
 	uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
 	uavDesc.Texture2D.MipSlice = 0;
 
-	for (int i = 0; i < FRAMES_IN_FLIGHT; ++i)
-	{
-		CD3DX12_CPU_DESCRIPTOR_HANDLE uavHandle(
-			m_mainDescriptorHeap[i]->GetCPUDescriptorHandleForHeapStart(),
-			3,
-			descriptorSize);
-
-		m_device->CreateUnorderedAccessView(m_computeOutputTexture, nullptr, &uavDesc, uavHandle);
-	}
-
 	D3D12_SHADER_RESOURCE_VIEW_DESC computeSrvDesc = {};
 	computeSrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 	computeSrvDesc.Format = DXGI_FORMAT_R32_FLOAT;
@@ -816,21 +821,15 @@ TerrainApp::TerrainApp()
 		m_device->CreateShaderResourceView(m_computeOutputTexture, &computeSrvDesc, computeSrvHandle);
 	}
 
-	// ------------------------------------------------ Compute Shader Dispatch (UV Texture Generation) ------------------------------------------------
+	for (int i = 0; i < FRAMES_IN_FLIGHT; ++i)
+	{
+		CD3DX12_CPU_DESCRIPTOR_HANDLE uavHandle(
+			m_mainDescriptorHeap[i]->GetCPUDescriptorHandleForHeapStart(),
+			3,
+			descriptorSize);
 
-	m_commandList->SetPipelineState(m_computePipelineState);
-	m_commandList->SetComputeRootSignature(m_computeRootSignature);
-
-	ID3D12DescriptorHeap* computeDescriptorHeaps[] = { m_mainDescriptorHeap[0] };
-	m_commandList->SetDescriptorHeaps(_countof(computeDescriptorHeaps), computeDescriptorHeaps);
-
-	CD3DX12_GPU_DESCRIPTOR_HANDLE uavGpuHandle(
-		m_mainDescriptorHeap[0]->GetGPUDescriptorHandleForHeapStart(),
-		3,
-		descriptorSize);
-	m_commandList->SetComputeRootDescriptorTable(0, uavGpuHandle);
-
-	m_commandList->Dispatch(135, 135, 1);
+		m_device->CreateUnorderedAccessView(m_computeOutputTexture, nullptr, &uavDesc, uavHandle);
+	}
 
 	CD3DX12_RESOURCE_BARRIER computeToSrvBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
 		m_computeOutputTexture,
@@ -1081,10 +1080,56 @@ void TerrainApp::Run()
 		ImGui::SliderInt("Octaves", &m_constantBuffer.noise_octaves, 1, 8);
 		ImGui::End();
 
+		ImGui::Begin("Heightmap Baking");
+
+		UINT descriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+		if (ImGui::Button("Bake Heightmap"))
+		{
+			CD3DX12_RESOURCE_BARRIER srvToUavBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
+				m_computeOutputTexture,
+				D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+				D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+			m_commandList->ResourceBarrier(1, &srvToUavBarrier);
+
+			m_commandList->SetPipelineState(m_computePipelineState);
+			m_commandList->SetComputeRootSignature(m_computeRootSignature);
+
+			CD3DX12_GPU_DESCRIPTOR_HANDLE cbvGpuHandle(
+				m_mainDescriptorHeap[m_frameIndex]->GetGPUDescriptorHandleForHeapStart(),
+				0,
+				descriptorSize);
+			m_commandList->SetComputeRootDescriptorTable(0, cbvGpuHandle);
+
+			CD3DX12_GPU_DESCRIPTOR_HANDLE uavGpuHandle(
+				m_mainDescriptorHeap[m_frameIndex]->GetGPUDescriptorHandleForHeapStart(),
+				3,
+				descriptorSize);
+			m_commandList->SetComputeRootDescriptorTable(1, uavGpuHandle);
+
+			m_commandList->Dispatch(135, 135, 1);
+
+			CD3DX12_RESOURCE_BARRIER uavToSrvBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
+				m_computeOutputTexture,
+				D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+				D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+			m_commandList->ResourceBarrier(1, &uavToSrvBarrier);
+		}
+
+		CD3DX12_GPU_DESCRIPTOR_HANDLE srvGpuHandle(
+			m_mainDescriptorHeap[m_frameIndex]->GetGPUDescriptorHandleForHeapStart(),
+			2,
+			descriptorSize);
+
+		ImGui::Image((ImTextureID)srvGpuHandle.ptr, ImVec2(1080, 1080));
+
+		ImGui::End();
+
 #endif
 
 		ImGui::Render();
 		ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), m_commandList);
+
 
 #endif
 
