@@ -12,6 +12,7 @@
 #include <DirectXMath.h>
 #include "Include/d3dx12.h"
 #include "Camera.h"
+#include "Texture.h"
 
 #define FRAMES_IN_FLIGHT 3
 
@@ -71,19 +72,6 @@ private:
 	{
 		DirectX::XMFLOAT3 pos;
 		DirectX::XMFLOAT2 uv;
-	};
-
-	// ------------------------ stb Image Loading ------------------------
-
-	struct Image 
-	{
-		~Image();
-
-		void LoadImageFromFile(const std::string& path, bool flip = true);
-
-		char* Bytes = nullptr;
-		int Width;
-		int Height;
 	};
 
 	// ------------------------ Input Handling ------------------------
@@ -156,13 +144,13 @@ private:
 	ID3D12Resource* m_constantBufferUploadHeap[FRAMES_IN_FLIGHT] = {};
 	ConstantBuffer m_constantBuffer = {};
 	UINT8* m_constantBufferGPUAddress[FRAMES_IN_FLIGHT] = {};
-	ID3D12Resource* m_textureBuffer = nullptr;
-	ID3D12Resource* m_textureBufferUploadHeap = nullptr;
 	ID3D12RootSignature* m_computeRootSignature = nullptr;
 	ID3D12PipelineState* m_computePipelineState = nullptr;
-	ID3D12Resource* m_computeOutputTexture = nullptr;
 	ID3D12Resource* m_heightmapReadbackBuffer = nullptr;
 	bool m_saveHeightmapAfterFrame = false;
+
+	Texture m_albedoTexture = {};
+	Texture m_computeOutputTexture = {};
 
 #if ENABLE_IMGUI
 	static const int IMGUI_DESCRIPTOR_OFFSET = 10;

@@ -50,6 +50,7 @@ add_executable(Terrain
 "Include/d3dx12.h" 
 ${SHADER_FILES} 
 "Camera.cpp" "Camera.h" 
+"Texture.h" "Texture.cpp"
 "Include/stb/stb.cpp" "Include/stb/stb_image.h" "Include/stb/stb_image_write.h" 
 "Include/ImGui/imconfig.h" "Include/ImGui/imgui.cpp" "Include/ImGui/imgui.h" 
 "Include/ImGui/ImGuizmo.cpp" "Include/ImGui/ImGuizmo.h" "Include/ImGui/imgui_demo.cpp" 

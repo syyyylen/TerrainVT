@@ -687,73 +687,7 @@ TerrainApp::TerrainApp()
 
 	// ------------------------------------------------ Terrain Test Texture ------------------------------------------------
 
-	Image texture;
-	texture.LoadImageFromFile("Assets/rocks_albedo.png");
-
-	D3D12_RESOURCE_DESC textureDesc = {};
-	textureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-	textureDesc.Alignment = 0;
-	textureDesc.Width = texture.Width;
-	textureDesc.Height = texture.Height;
-	textureDesc.DepthOrArraySize = 1;
-	textureDesc.MipLevels = 1;
-	textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	textureDesc.SampleDesc.Count = 1;
-	textureDesc.SampleDesc.Quality = 0;
-	textureDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-	textureDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
-
-	hr = m_device->CreateCommittedResource(
-		&heapPropDefault,
-		D3D12_HEAP_FLAG_NONE,
-		&textureDesc,
-		D3D12_RESOURCE_STATE_COPY_DEST,
-		nullptr,
-		IID_PPV_ARGS(&m_textureBuffer));
-
-	if (FAILED(hr))
-	{
-		return;
-	}
-
-	m_textureBuffer->SetName(L"Texture Buffer Resource Heap");
-
-	UINT64 textureUploadBufferSize;
-	m_device->GetCopyableFootprints(&textureDesc, 0, 1, 0, nullptr, nullptr, nullptr, &textureUploadBufferSize);
-
-	CD3DX12_RESOURCE_DESC texUploadBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(textureUploadBufferSize);
-
-	hr = m_device->CreateCommittedResource(
-		&heapPropUpload,
-		D3D12_HEAP_FLAG_NONE,
-		&texUploadBufferDesc,
-		D3D12_RESOURCE_STATE_GENERIC_READ,
-		nullptr,
-		IID_PPV_ARGS(&m_textureBufferUploadHeap));
-
-	if (FAILED(hr))
-	{
-		return;
-	}
-
-	m_textureBufferUploadHeap->SetName(L"Texture Buffer Upload Resource Heap");
-
-	D3D12_SUBRESOURCE_DATA textureData = {};
-	textureData.pData = texture.Bytes;
-	textureData.RowPitch = texture.Width * 4;
-	textureData.SlicePitch = texture.Width * 4 * textureDesc.Height;
-
-	UpdateSubresources(m_commandList, m_textureBuffer, m_textureBufferUploadHeap, 0, 0, 1, &textureData);
-
-	CD3DX12_RESOURCE_BARRIER textureTransition = CD3DX12_RESOURCE_BARRIER::Transition(m_textureBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-
-	m_commandList->ResourceBarrier(1, &textureTransition);
-
-	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-	srvDesc.Format = textureDesc.Format;
-	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-	srvDesc.Texture2D.MipLevels = 1;
+	m_albedoTexture.LoadFromFile(m_device, m_commandList, "Assets/rocks_albedo.png");
 
 	UINT descriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
@@ -764,54 +698,18 @@ TerrainApp::TerrainApp()
 			1,
 			descriptorSize);
 
-		m_device->CreateShaderResourceView(m_textureBuffer, &srvDesc, srvHandle);
-	}
-
-	if (FAILED(hr))
-	{
-		return;
+		m_albedoTexture.CreateSRV(m_device, srvHandle);
 	}
 
 	// ------------------------------------------------ Compute Shader Resources ------------------------------------------------
 
-	D3D12_RESOURCE_DESC computeTextureDesc = {};
-	computeTextureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-	computeTextureDesc.Alignment = 0;
-	computeTextureDesc.Width = 1080;
-	computeTextureDesc.Height = 1080;
-	computeTextureDesc.DepthOrArraySize = 1;
-	computeTextureDesc.MipLevels = 1;
-	computeTextureDesc.Format = DXGI_FORMAT_R32_FLOAT;
-	computeTextureDesc.SampleDesc.Count = 1;
-	computeTextureDesc.SampleDesc.Quality = 0;
-	computeTextureDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-	computeTextureDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-
-	hr = m_device->CreateCommittedResource(
-		&heapPropDefault,
-		D3D12_HEAP_FLAG_NONE,
-		&computeTextureDesc,
-		D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-		nullptr,
-		IID_PPV_ARGS(&m_computeOutputTexture));
-
-	if (FAILED(hr))
-	{
-		return;
-	}
-
-	m_computeOutputTexture->SetName(L"Compute Output Texture");
-
-	D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
-	uavDesc.Format = DXGI_FORMAT_R32_FLOAT;
-	uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
-	uavDesc.Texture2D.MipSlice = 0;
-
-	D3D12_SHADER_RESOURCE_VIEW_DESC computeSrvDesc = {};
-	computeSrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-	computeSrvDesc.Format = DXGI_FORMAT_R32_FLOAT;
-	computeSrvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-	computeSrvDesc.Texture2D.MipLevels = 1;
+	m_computeOutputTexture.CreateEmpty(
+		m_device,
+		1080,
+		1080,
+		DXGI_FORMAT_R32_FLOAT,
+		D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+		D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
 	for (int i = 0; i < FRAMES_IN_FLIGHT; ++i)
 	{
@@ -820,17 +718,14 @@ TerrainApp::TerrainApp()
 			2,
 			descriptorSize);
 
-		m_device->CreateShaderResourceView(m_computeOutputTexture, &computeSrvDesc, computeSrvHandle);
-	}
+		m_computeOutputTexture.CreateSRV(m_device, computeSrvHandle);
 
-	for (int i = 0; i < FRAMES_IN_FLIGHT; ++i)
-	{
 		CD3DX12_CPU_DESCRIPTOR_HANDLE uavHandle(
 			m_mainDescriptorHeap[i]->GetCPUDescriptorHandleForHeapStart(),
 			3,
 			descriptorSize);
 
-		m_device->CreateUnorderedAccessView(m_computeOutputTexture, nullptr, &uavDesc, uavHandle);
+		m_computeOutputTexture.CreateUAV(m_device, uavHandle);
 	}
 
 	UINT64 readbackBufferSize = 1080 * 1080 * 4;
@@ -853,7 +748,7 @@ TerrainApp::TerrainApp()
 	m_heightmapReadbackBuffer->SetName(L"Heightmap Readback Buffer");
 
 	CD3DX12_RESOURCE_BARRIER computeToSrvBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
-		m_computeOutputTexture,
+		m_computeOutputTexture.resource,
 		D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
 		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 	m_commandList->ResourceBarrier(1, &computeToSrvBarrier);
@@ -902,7 +797,7 @@ TerrainApp::TerrainApp()
 	m_constantBuffer.noise_scale = 3.0f;
 	m_constantBuffer.noise_height = 80.0f;
 	m_constantBuffer.noise_octaves = 5;
-	m_constantBuffer.runtime_noise = false;
+	m_constantBuffer.runtime_noise = true;
 
 #if ENABLE_IMGUI
 
@@ -986,8 +881,8 @@ TerrainApp::~TerrainApp()
 			m_fences[i]->Release();
 	};
 
-	if (m_computeOutputTexture)
-		m_computeOutputTexture->Release();
+	m_albedoTexture.Release();
+	m_computeOutputTexture.Release();
 
 	if (m_heightmapReadbackBuffer)
 		m_heightmapReadbackBuffer->Release();
@@ -1118,7 +1013,7 @@ void TerrainApp::Run()
 			if (ImGui::Button("Bake Heightmap"))
 			{
 				CD3DX12_RESOURCE_BARRIER srvToUavBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
-					m_computeOutputTexture,
+					m_computeOutputTexture.resource,
 					D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
 					D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 				m_commandList->ResourceBarrier(1, &srvToUavBarrier);
@@ -1141,13 +1036,13 @@ void TerrainApp::Run()
 				m_commandList->Dispatch(135, 135, 1);
 
 				CD3DX12_RESOURCE_BARRIER uavToCopyBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
-					m_computeOutputTexture,
+					m_computeOutputTexture.resource,
 					D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
 					D3D12_RESOURCE_STATE_COPY_SOURCE);
 				m_commandList->ResourceBarrier(1, &uavToCopyBarrier);
 
 				D3D12_TEXTURE_COPY_LOCATION srcLocation = {};
-				srcLocation.pResource = m_computeOutputTexture;
+				srcLocation.pResource = m_computeOutputTexture.resource;
 				srcLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
 				srcLocation.SubresourceIndex = 0;
 
@@ -1164,7 +1059,7 @@ void TerrainApp::Run()
 				m_commandList->CopyTextureRegion(&dstLocation, 0, 0, 0, &srcLocation, nullptr);
 
 				CD3DX12_RESOURCE_BARRIER copyToSrvBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
-					m_computeOutputTexture,
+					m_computeOutputTexture.resource,
 					D3D12_RESOURCE_STATE_COPY_SOURCE,
 					D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 				m_commandList->ResourceBarrier(1, &copyToSrvBarrier);
@@ -1603,32 +1498,6 @@ void TerrainApp::UpdateInputs()
 		}
 		::memcpy(m_old_keys_state, m_keys_state, sizeof(unsigned char) * 256);
 	}
-}
-
-// ------------------------------------------------ stb Image Loading ------------------------------------------------
-
-TerrainApp::Image::~Image()
-{
-	if (Bytes != nullptr)
-	{
-		delete[] Bytes;
-		Bytes = nullptr;
-	}
-}
-
-void TerrainApp::Image::LoadImageFromFile(const std::string& path, bool flip)
-{
-	int channels;
-
-	stbi_set_flip_vertically_on_load(flip);
-	Bytes = reinterpret_cast<char*>(stbi_load(path.c_str(), &Width, &Height, &channels, STBI_rgb_alpha));
-	if (!Bytes)
-	{
-		std::cout << "Failed to load image " + path << std::endl;
-		return;
-	}
-
-	std::cout << "Loaded image " + path << std::endl;
 }
 
 // ------------------------------------------------ Heightmap Saving ------------------------------------------------
