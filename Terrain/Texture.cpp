@@ -1,6 +1,4 @@
 #include "Texture.h"
-#include "Include/stb/stb_image.h"
-#include "Include/stb/stb_image_write.h"
 #include "Include/d3dx12.h"
 #include <iostream>
 
@@ -13,12 +11,12 @@ Image::~Image()
     }
 }
 
-void Image::LoadImageFromFile(const std::string& path, bool flip)
+void Image::LoadImageFromFile(const std::string& path, bool flip, int desiredChannels)
 {
     int channels;
 
     stbi_set_flip_vertically_on_load(flip);
-    bytes = reinterpret_cast<char*>(stbi_load(path.c_str(), &width, &height, &channels, STBI_rgb_alpha));
+    bytes = reinterpret_cast<char*>(stbi_load(path.c_str(), &width, &height, &channels, desiredChannels));
     if (!bytes)
     {
         std::cout << "Failed to load image " + path << std::endl;
@@ -35,8 +33,17 @@ void Texture::LoadFromFile(
     DXGI_FORMAT textureFormat,
     bool flip)
 {
+    int desiredChannels = STBI_rgb_alpha;
+    int bytesPerPixel = 4;
+
+    if (textureFormat == DXGI_FORMAT_R8_UNORM)
+    {
+        desiredChannels = STBI_grey;
+        bytesPerPixel = 1;
+    }
+
     Image img;
-    img.LoadImageFromFile(filepath, flip);
+    img.LoadImageFromFile(filepath, flip, desiredChannels);
 
     format = textureFormat;
     width = img.width;
@@ -87,8 +94,8 @@ void Texture::LoadFromFile(
 
     D3D12_SUBRESOURCE_DATA textureData = {};
     textureData.pData = img.bytes;
-    textureData.RowPitch = width * 4;
-    textureData.SlicePitch = width * 4 * height;
+    textureData.RowPitch = width * bytesPerPixel;
+    textureData.SlicePitch = width * bytesPerPixel * height;
 
     UpdateSubresources(commandList, resource, uploadHeap, 0, 0, 1, &textureData);
 

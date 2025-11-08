@@ -321,7 +321,7 @@ TerrainApp::TerrainApp()
 		D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = {};
 		cbvDesc.BufferLocation = m_constantBufferUploadHeap[i]->GetGPUVirtualAddress();
 		cbvDesc.SizeInBytes = (sizeof(ConstantBuffer) + 255) & ~255;
-		m_device->CreateConstantBufferView(&cbvDesc, m_mainDescriptorHeap[i]->GetCPUDescriptorHandleForHeapStart());
+		m_device->CreateConstantBufferView(&cbvDesc, m_mainDescriptorHeap[i]->GetCPUDescriptorHandleForHeapStart()); // Constant Buffer (b0)
 
 		ZeroMemory(&m_constantBuffer, sizeof(m_constantBuffer));
 
@@ -370,16 +370,21 @@ TerrainApp::TerrainApp()
 
 	// ------------------------------------------------ D3D12 Init (Root Signature) ------------------------------------------------
 
+	// Descriptor 0: Constant Buffer (b0)
+	// Descriptor 1: Albedo Texture (t0)
+	// Descriptor 2: Baked Heightmap (t1)
+	// Descriptor 3: Baked Normal Map (t2)
+
 	D3D12_DESCRIPTOR_RANGE  descriptorTableRanges[2];
 
 	descriptorTableRanges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
-	descriptorTableRanges[0].NumDescriptors = 1;
+	descriptorTableRanges[0].NumDescriptors = 1; // b0
 	descriptorTableRanges[0].BaseShaderRegister = 0;
 	descriptorTableRanges[0].RegisterSpace = 0;
 	descriptorTableRanges[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
 	descriptorTableRanges[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-	descriptorTableRanges[1].NumDescriptors = 2;
+	descriptorTableRanges[1].NumDescriptors = 3; // t0-t2
 	descriptorTableRanges[1].BaseShaderRegister = 0;
 	descriptorTableRanges[1].RegisterSpace = 0;
 	descriptorTableRanges[1].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
@@ -499,16 +504,20 @@ TerrainApp::TerrainApp()
 
 	// ------------------------------------------------ D3D12 Init (Compute Pipeline) ------------------------------------------------
 
+	// Root Parameter 0: Descriptor 0: Constant Buffer (b0)
+	// Root Parameter 1: Descriptor 4: Compute Heightmap UAV (u0)
+	//                   Descriptor 5: Compute Normal Map UAV (u1)
+
 	D3D12_DESCRIPTOR_RANGE computeCBVRange;
 	computeCBVRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
-	computeCBVRange.NumDescriptors = 1;
+	computeCBVRange.NumDescriptors = 1; // b0
 	computeCBVRange.BaseShaderRegister = 0;
 	computeCBVRange.RegisterSpace = 0;
 	computeCBVRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
 	D3D12_DESCRIPTOR_RANGE computeUAVRange;
 	computeUAVRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
-	computeUAVRange.NumDescriptors = 2;
+	computeUAVRange.NumDescriptors = 2; // u0-u1
 	computeUAVRange.BaseShaderRegister = 0;
 	computeUAVRange.RegisterSpace = 0;
 	computeUAVRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
@@ -695,10 +704,32 @@ TerrainApp::TerrainApp()
 	{
 		CD3DX12_CPU_DESCRIPTOR_HANDLE srvHandle(
 			m_mainDescriptorHeap[i]->GetCPUDescriptorHandleForHeapStart(),
-			1,
+			1, // Albedo Texture (t0)
 			descriptorSize);
 
 		m_albedoTexture.CreateSRV(m_device, srvHandle);
+	}
+
+	// ------------------------------------------------ Baked Heightmap & Normal Map Loading ------------------------------------------------
+
+	m_bakedHeightmapTexture.LoadFromFile(m_device, m_commandList, "Assets/HeightMap.png", DXGI_FORMAT_R8_UNORM);
+	m_bakedNormalMapTexture.LoadFromFile(m_device, m_commandList, "Assets/NormalMap.png");
+
+	for (int i = 0; i < FRAMES_IN_FLIGHT; ++i)
+	{
+		CD3DX12_CPU_DESCRIPTOR_HANDLE bakedHeightmapSrvHandle(
+			m_mainDescriptorHeap[i]->GetCPUDescriptorHandleForHeapStart(),
+			2, // Baked Heightmap (t1)
+			descriptorSize);
+
+		m_bakedHeightmapTexture.CreateSRV(m_device, bakedHeightmapSrvHandle);
+
+		CD3DX12_CPU_DESCRIPTOR_HANDLE bakedNormalMapSrvHandle(
+			m_mainDescriptorHeap[i]->GetCPUDescriptorHandleForHeapStart(),
+			3, // Baked Normal Map (t2)
+			descriptorSize);
+
+		m_bakedNormalMapTexture.CreateSRV(m_device, bakedNormalMapSrvHandle);
 	}
 
 	// ------------------------------------------------ Compute Shader Resources ------------------------------------------------
@@ -721,33 +752,33 @@ TerrainApp::TerrainApp()
 
 	for (int i = 0; i < FRAMES_IN_FLIGHT; ++i)
 	{
-		CD3DX12_CPU_DESCRIPTOR_HANDLE computeSrvHandle(
-			m_mainDescriptorHeap[i]->GetCPUDescriptorHandleForHeapStart(),
-			2,
-			descriptorSize);
-
-		m_computeOutputTexture.CreateSRV(m_device, computeSrvHandle);
-
-		CD3DX12_CPU_DESCRIPTOR_HANDLE computeNormalsSrvHandle(
-			m_mainDescriptorHeap[i]->GetCPUDescriptorHandleForHeapStart(),
-			3,
-			descriptorSize);
-
-		m_computeNormalMapTexture.CreateSRV(m_device, computeNormalsSrvHandle);
-
 		CD3DX12_CPU_DESCRIPTOR_HANDLE uavHandle(
 			m_mainDescriptorHeap[i]->GetCPUDescriptorHandleForHeapStart(),
-			4,
+			4, // Compute Heightmap UAV (u0)
 			descriptorSize);
 
 		m_computeOutputTexture.CreateUAV(m_device, uavHandle);
 
 		CD3DX12_CPU_DESCRIPTOR_HANDLE normalMapUavHandle(
 			m_mainDescriptorHeap[i]->GetCPUDescriptorHandleForHeapStart(),
-			5,
+			5, // Compute Normal Map UAV (u1)
 			descriptorSize);
 
 		m_computeNormalMapTexture.CreateUAV(m_device, normalMapUavHandle);
+
+		CD3DX12_CPU_DESCRIPTOR_HANDLE computeSrvHandle(
+			m_mainDescriptorHeap[i]->GetCPUDescriptorHandleForHeapStart(),
+			6, // Compute Heightmap SRV (used by ImGui only)
+			descriptorSize);
+
+		m_computeOutputTexture.CreateSRV(m_device, computeSrvHandle);
+
+		CD3DX12_CPU_DESCRIPTOR_HANDLE computeNormalsSrvHandle(
+			m_mainDescriptorHeap[i]->GetCPUDescriptorHandleForHeapStart(),
+			7, // Compute Normal Map SRV (used by ImGui only)
+			descriptorSize);
+
+		m_computeNormalMapTexture.CreateSRV(m_device, computeNormalsSrvHandle);
 	}
 
 	UINT64 readbackBufferSize = 1080 * 1080 * 4;
@@ -839,7 +870,7 @@ TerrainApp::TerrainApp()
 	m_constantBuffer.noise_scale = 3.0f;
 	m_constantBuffer.noise_height = 80.0f;
 	m_constantBuffer.noise_octaves = 5;
-	m_constantBuffer.runtime_noise = true;
+	m_constantBuffer.runtime_noise = m_runtimeNoiseAtStart;
 
 #if ENABLE_IMGUI
 
@@ -860,7 +891,7 @@ TerrainApp::TerrainApp()
 		FRAMES_IN_FLIGHT,
 		DXGI_FORMAT_R8G8B8A8_UNORM,
 		m_mainDescriptorHeap[0],
-		CD3DX12_CPU_DESCRIPTOR_HANDLE(m_mainDescriptorHeap[0]->GetCPUDescriptorHandleForHeapStart(), IMGUI_DESCRIPTOR_OFFSET, descriptorSize),
+		CD3DX12_CPU_DESCRIPTOR_HANDLE(m_mainDescriptorHeap[0]->GetCPUDescriptorHandleForHeapStart(), IMGUI_DESCRIPTOR_OFFSET, descriptorSize), // Descriptor 20+: ImGui Font Atlas
 		CD3DX12_GPU_DESCRIPTOR_HANDLE(m_mainDescriptorHeap[0]->GetGPUDescriptorHandleForHeapStart(), IMGUI_DESCRIPTOR_OFFSET, descriptorSize));
 
 #endif
@@ -926,6 +957,8 @@ TerrainApp::~TerrainApp()
 	m_albedoTexture.Release();
 	m_computeOutputTexture.Release();
 	m_computeNormalMapTexture.Release();
+	m_bakedHeightmapTexture.Release();
+	m_bakedNormalMapTexture.Release();
 
 	if (m_heightmapReadbackBuffer)
 		m_heightmapReadbackBuffer->Release();
@@ -1074,13 +1107,13 @@ void TerrainApp::Run()
 
 				CD3DX12_GPU_DESCRIPTOR_HANDLE cbvGpuHandle(
 					m_mainDescriptorHeap[m_frameIndex]->GetGPUDescriptorHandleForHeapStart(),
-					0,
+					0, // Constant Buffer (b0)
 					descriptorSize);
 				m_commandList->SetComputeRootDescriptorTable(0, cbvGpuHandle);
 
 				CD3DX12_GPU_DESCRIPTOR_HANDLE uavGpuHandle(
 					m_mainDescriptorHeap[m_frameIndex]->GetGPUDescriptorHandleForHeapStart(),
-					4,
+					4, // Compute UAVs (u0, u1)
 					descriptorSize);
 				m_commandList->SetComputeRootDescriptorTable(1, uavGpuHandle);
 
@@ -1147,14 +1180,14 @@ void TerrainApp::Run()
 
 			CD3DX12_GPU_DESCRIPTOR_HANDLE heightSrvGpuHandle(
 				m_mainDescriptorHeap[m_frameIndex]->GetGPUDescriptorHandleForHeapStart(),
-				2,
+				6, // Compute Heightmap SRV
 				descriptorSize);
 
 			ImGui::Image((ImTextureID)heightSrvGpuHandle.ptr, ImVec2(540, 540));
 
 			CD3DX12_GPU_DESCRIPTOR_HANDLE normalSrvGpuHandle(
 				m_mainDescriptorHeap[m_frameIndex]->GetGPUDescriptorHandleForHeapStart(),
-				3,
+				7, // Compute Normal Map SRV
 				descriptorSize);
 
 			ImGui::Image((ImTextureID)normalSrvGpuHandle.ptr, ImVec2(540, 540));
@@ -1603,20 +1636,9 @@ void TerrainApp::SaveHeightmapToPNG(const std::string& filepath)
 	float* floatData = static_cast<float*>(pData);
 	std::vector<unsigned char> imageData(1080 * 1080);
 
-	float minHeight = floatData[0];
-	float maxHeight = floatData[0];
 	for (int i = 0; i < 1080 * 1080; i++)
 	{
-		minHeight = std::min(minHeight, floatData[i]);
-		maxHeight = std::max(maxHeight, floatData[i]);
-	}
-
-	float range = maxHeight - minHeight;
-	if (range < 0.0001f) range = 1.0f;
-
-	for (int i = 0; i < 1080 * 1080; i++)
-	{
-		float normalized = (floatData[i] - minHeight) / range;
+		float normalized = std::clamp(floatData[i], 0.0f, 1.0f);
 		imageData[i] = static_cast<unsigned char>(normalized * 255.0f);
 	}
 

@@ -103,6 +103,7 @@ private:
 
 	bool m_drawWireframe = false;
 	bool m_maximizeAtStart = true;
+	bool m_runtimeNoiseAtStart = false;
 
 	HWND m_hwnd = nullptr;
 	bool m_isRunning = false;
@@ -154,6 +155,8 @@ private:
 	Texture m_albedoTexture = {};
 	Texture m_computeOutputTexture = {};
 	Texture m_computeNormalMapTexture = {};
+	Texture m_bakedHeightmapTexture = {};
+	Texture m_bakedNormalMapTexture = {};
 
 #if ENABLE_IMGUI
 	static const int IMGUI_DESCRIPTOR_OFFSET = 20;

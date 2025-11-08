@@ -1,12 +1,14 @@
 #pragma once
 #include <d3d12.h>
 #include <string>
+#include "Include/stb/stb_image.h"
+#include "Include/stb/stb_image_write.h"
 
 struct Image
 {
     ~Image();
 
-    void LoadImageFromFile(const std::string& path, bool flip = true);
+    void LoadImageFromFile(const std::string& path, bool flip = true, int desiredChannels = STBI_rgb_alpha);
 
     char* bytes = nullptr;
     int width;

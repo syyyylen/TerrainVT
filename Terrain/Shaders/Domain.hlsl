@@ -118,6 +118,10 @@ cbuffer ConstantBuffer : register(b0)
     float2 padding;
 };
 
+Texture2D bakedHeightMap : register(t1);
+Texture2D bakedNormalMap : register(t2);
+SamplerState samplerState : register(s0);
+
 [domain("tri")]
 DSOutput main(HSConstantOutput input, float3 bary : SV_DomainLocation, const OutputPatch<HSOutput, 3> patch)
 {
@@ -150,7 +154,11 @@ DSOutput main(HSConstantOutput input, float3 bary : SV_DomainLocation, const Out
     }
     else
     {
-        output.normal = float3(0.0, 1.0, 0.0);
+        float sampledHeight = bakedHeightMap.SampleLevel(samplerState, output.uv, 0).r;
+        pos.y += sampledHeight * noise_height;
+
+        float3 sampledNormal = bakedNormalMap.SampleLevel(samplerState, output.uv, 0).rgb;
+        output.normal = normalize(sampledNormal * 2.0 - 1.0);
     }
     
     output.worldPos = pos;
