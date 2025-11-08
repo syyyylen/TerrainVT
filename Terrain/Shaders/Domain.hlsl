@@ -1,5 +1,3 @@
-#if USE_PERLIN_NOISE
-
 static const int p[512] =
 {
     151, 160, 137, 91, 90, 15, 131, 13, 201, 95, 96, 53, 194, 233, 7, 225, 140, 36, 103, 30, 69, 142,
@@ -88,8 +86,6 @@ float fbm(float x, float y, int octaves, float persistence, float lacunarity)
     return total / maxValue;
 }
 
-#endif
-
 struct HSConstantOutput
 {
     float edges[3] : SV_TessFactor;
@@ -113,14 +109,13 @@ struct DSOutput
 cbuffer ConstantBuffer : register(b0)
 {
     row_major float4x4 viewProj;
-#if USE_PERLIN_NOISE
     float noise_persistence;
     float noise_lacunarity;
     float noise_scale;
     float noise_height;
     int noise_octaves;
-    float3 padding;
-#endif
+    bool noise_runtime;
+    float2 padding;
 };
 
 [domain("tri")]
@@ -132,30 +127,31 @@ DSOutput main(HSConstantOutput input, float3 bary : SV_DomainLocation, const Out
     
     output.uv = patch[0].uv * bary.x + patch[1].uv * bary.y + patch[2].uv * bary.z;
     
-#if USE_PERLIN_NOISE
+    // TODO ugly branch here
+    // TODO use define and hot reolad shader
+    if (noise_runtime)
+    {
+        float scale = noise_scale;
+        float noise = fbm(output.uv.x * scale, output.uv.y * scale, noise_octaves, noise_persistence, noise_lacunarity);
     
-    float scale = noise_scale;
-    float noise = fbm(output.uv.x * scale, output.uv.y * scale, noise_octaves, noise_persistence, noise_lacunarity);
+        pos.y += noise * noise_height;
     
-    pos.y += noise * noise_height;
+        float delta = 0.01;
     
-    float delta = 0.01;
+        float heightL = fbm((output.uv.x - delta) * scale, output.uv.y * scale, noise_octaves, noise_persistence, noise_lacunarity) * noise_height;
+        float heightR = fbm((output.uv.x + delta) * scale, output.uv.y * scale, noise_octaves, noise_persistence, noise_lacunarity) * noise_height;
+        float heightD = fbm(output.uv.x * scale, (output.uv.y - delta) * scale, noise_octaves, noise_persistence, noise_lacunarity) * noise_height;
+        float heightU = fbm(output.uv.x * scale, (output.uv.y + delta) * scale, noise_octaves, noise_persistence, noise_lacunarity) * noise_height;
     
-    float heightL = fbm((output.uv.x - delta) * scale, output.uv.y * scale, noise_octaves, noise_persistence, noise_lacunarity) * noise_height;
-    float heightR = fbm((output.uv.x + delta) * scale, output.uv.y * scale, noise_octaves, noise_persistence, noise_lacunarity) * noise_height;
-    float heightD = fbm(output.uv.x * scale, (output.uv.y - delta) * scale, noise_octaves, noise_persistence, noise_lacunarity) * noise_height;
-    float heightU = fbm(output.uv.x * scale, (output.uv.y + delta) * scale, noise_octaves, noise_persistence, noise_lacunarity) * noise_height;
+        float3 tangentX = float3(2.0 * delta, heightR - heightL, 0.0);
+        float3 tangentZ = float3(0.0, heightU - heightD, 2.0 * delta);
     
-    float3 tangentX = float3(2.0 * delta, heightR - heightL, 0.0);
-    float3 tangentZ = float3(0.0, heightU - heightD, 2.0 * delta);
-    
-    output.normal = normalize(cross(tangentZ, tangentX));
-    
-#else
-    
-    output.normal = float3(0.0, 1.0, 0.0);
-    
-#endif
+        output.normal = normalize(cross(tangentZ, tangentX));
+    }
+    else
+    {
+        output.normal = float3(0.0, 1.0, 0.0);
+    }
     
     output.worldPos = pos;
     output.pos = mul(float4(pos, 1.0f), viewProj);

@@ -17,8 +17,6 @@
 
 #define ENABLE_IMGUI 1
 
-#define RUNTIME_PERLIN_NOISE 1
-
 class TerrainApp 
 {
 public:
@@ -53,23 +51,20 @@ private:
 
 	void CompileShaderFromFile(const std::string& path, ShaderType shaderType, ShaderData& outShaderData, const std::vector<std::pair<std::wstring, std::wstring>>& defines = {});
 
-#if RUNTIME_PERLIN_NOISE
 	void SaveHeightmapToPNG(const std::string& filepath);
-#endif
 
 	// ------------------------ Render Data Structures ------------------------
 
 	struct ConstantBuffer 
 	{
 		DirectX::XMFLOAT4X4 viewProj;
-#if RUNTIME_PERLIN_NOISE
 		float noise_persistence;
 		float noise_lacunarity;
 		float noise_scale;
 		float noise_height;
 		int noise_octaves;
-		DirectX::XMFLOAT3 padding;
-#endif
+		bool runtime_noise;
+		DirectX::XMFLOAT2 padding;
 	};
 
 	struct Vertex 
