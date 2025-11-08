@@ -53,6 +53,7 @@ private:
 	void CompileShaderFromFile(const std::string& path, ShaderType shaderType, ShaderData& outShaderData, const std::vector<std::pair<std::wstring, std::wstring>>& defines = {});
 
 	void SaveHeightmapToPNG(const std::string& filepath);
+	void SaveNormalMapToPNG(const std::string& filepath);
 
 	// ------------------------ Render Data Structures ------------------------
 
@@ -147,12 +148,14 @@ private:
 	ID3D12RootSignature* m_computeRootSignature = nullptr;
 	ID3D12PipelineState* m_computePipelineState = nullptr;
 	ID3D12Resource* m_heightmapReadbackBuffer = nullptr;
+	ID3D12Resource* m_normalmapReadbackBuffer = nullptr;
 	bool m_saveHeightmapAfterFrame = false;
 
 	Texture m_albedoTexture = {};
 	Texture m_computeOutputTexture = {};
+	Texture m_computeNormalMapTexture = {};
 
 #if ENABLE_IMGUI
-	static const int IMGUI_DESCRIPTOR_OFFSET = 10;
+	static const int IMGUI_DESCRIPTOR_OFFSET = 20;
 #endif
 };

@@ -508,7 +508,7 @@ TerrainApp::TerrainApp()
 
 	D3D12_DESCRIPTOR_RANGE computeUAVRange;
 	computeUAVRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
-	computeUAVRange.NumDescriptors = 1;
+	computeUAVRange.NumDescriptors = 2;
 	computeUAVRange.BaseShaderRegister = 0;
 	computeUAVRange.RegisterSpace = 0;
 	computeUAVRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
@@ -711,6 +711,14 @@ TerrainApp::TerrainApp()
 		D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
 		D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
+	m_computeNormalMapTexture.CreateEmpty(
+		m_device,
+		1080,
+		1080,
+		DXGI_FORMAT_R8G8B8A8_UNORM,
+		D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+		D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
 	for (int i = 0; i < FRAMES_IN_FLIGHT; ++i)
 	{
 		CD3DX12_CPU_DESCRIPTOR_HANDLE computeSrvHandle(
@@ -720,12 +728,26 @@ TerrainApp::TerrainApp()
 
 		m_computeOutputTexture.CreateSRV(m_device, computeSrvHandle);
 
-		CD3DX12_CPU_DESCRIPTOR_HANDLE uavHandle(
+		CD3DX12_CPU_DESCRIPTOR_HANDLE computeNormalsSrvHandle(
 			m_mainDescriptorHeap[i]->GetCPUDescriptorHandleForHeapStart(),
 			3,
 			descriptorSize);
 
+		m_computeNormalMapTexture.CreateSRV(m_device, computeNormalsSrvHandle);
+
+		CD3DX12_CPU_DESCRIPTOR_HANDLE uavHandle(
+			m_mainDescriptorHeap[i]->GetCPUDescriptorHandleForHeapStart(),
+			4,
+			descriptorSize);
+
 		m_computeOutputTexture.CreateUAV(m_device, uavHandle);
+
+		CD3DX12_CPU_DESCRIPTOR_HANDLE normalMapUavHandle(
+			m_mainDescriptorHeap[i]->GetCPUDescriptorHandleForHeapStart(),
+			5,
+			descriptorSize);
+
+		m_computeNormalMapTexture.CreateUAV(m_device, normalMapUavHandle);
 	}
 
 	UINT64 readbackBufferSize = 1080 * 1080 * 4;
@@ -747,11 +769,31 @@ TerrainApp::TerrainApp()
 
 	m_heightmapReadbackBuffer->SetName(L"Heightmap Readback Buffer");
 
-	CD3DX12_RESOURCE_BARRIER computeToSrvBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
+	hr = m_device->CreateCommittedResource(
+		&readbackHeapProps,
+		D3D12_HEAP_FLAG_NONE,
+		&readbackBufferDesc,
+		D3D12_RESOURCE_STATE_COPY_DEST,
+		nullptr,
+		IID_PPV_ARGS(&m_normalmapReadbackBuffer));
+
+	if (FAILED(hr))
+	{
+		return;
+	}
+
+	m_normalmapReadbackBuffer->SetName(L"Normalmap Readback Buffer");
+
+	CD3DX12_RESOURCE_BARRIER barriers[2];
+	barriers[0] = CD3DX12_RESOURCE_BARRIER::Transition(
 		m_computeOutputTexture.resource,
 		D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
 		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-	m_commandList->ResourceBarrier(1, &computeToSrvBarrier);
+	barriers[1] = CD3DX12_RESOURCE_BARRIER::Transition(
+		m_computeNormalMapTexture.resource,
+		D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+	m_commandList->ResourceBarrier(2, barriers);
 
 	// ------------------------------------------------ D3D12 Init Execute Commands ------------------------------------------------
 
@@ -883,9 +925,13 @@ TerrainApp::~TerrainApp()
 
 	m_albedoTexture.Release();
 	m_computeOutputTexture.Release();
+	m_computeNormalMapTexture.Release();
 
 	if (m_heightmapReadbackBuffer)
 		m_heightmapReadbackBuffer->Release();
+
+	if (m_normalmapReadbackBuffer)
+		m_normalmapReadbackBuffer->Release();
 
 	if (m_computePipelineState)
 		m_computePipelineState->Release();
@@ -1012,11 +1058,16 @@ void TerrainApp::Run()
 
 			if (ImGui::Button("Bake Heightmap"))
 			{
-				CD3DX12_RESOURCE_BARRIER srvToUavBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
+				CD3DX12_RESOURCE_BARRIER srvToUavBarriers[2];
+				srvToUavBarriers[0] = CD3DX12_RESOURCE_BARRIER::Transition(
 					m_computeOutputTexture.resource,
 					D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
 					D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-				m_commandList->ResourceBarrier(1, &srvToUavBarrier);
+				srvToUavBarriers[1] = CD3DX12_RESOURCE_BARRIER::Transition(
+					m_computeNormalMapTexture.resource,
+					D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+					D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+				m_commandList->ResourceBarrier(2, srvToUavBarriers);
 
 				m_commandList->SetPipelineState(m_computePipelineState);
 				m_commandList->SetComputeRootSignature(m_computeRootSignature);
@@ -1029,51 +1080,84 @@ void TerrainApp::Run()
 
 				CD3DX12_GPU_DESCRIPTOR_HANDLE uavGpuHandle(
 					m_mainDescriptorHeap[m_frameIndex]->GetGPUDescriptorHandleForHeapStart(),
-					3,
+					4,
 					descriptorSize);
 				m_commandList->SetComputeRootDescriptorTable(1, uavGpuHandle);
 
 				m_commandList->Dispatch(135, 135, 1);
 
-				CD3DX12_RESOURCE_BARRIER uavToCopyBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
+				CD3DX12_RESOURCE_BARRIER uavToCopyBarriers[2];
+				uavToCopyBarriers[0] = CD3DX12_RESOURCE_BARRIER::Transition(
 					m_computeOutputTexture.resource,
 					D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
 					D3D12_RESOURCE_STATE_COPY_SOURCE);
-				m_commandList->ResourceBarrier(1, &uavToCopyBarrier);
+				uavToCopyBarriers[1] = CD3DX12_RESOURCE_BARRIER::Transition(
+					m_computeNormalMapTexture.resource,
+					D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+					D3D12_RESOURCE_STATE_COPY_SOURCE);
+				m_commandList->ResourceBarrier(2, uavToCopyBarriers);
 
-				D3D12_TEXTURE_COPY_LOCATION srcLocation = {};
-				srcLocation.pResource = m_computeOutputTexture.resource;
-				srcLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-				srcLocation.SubresourceIndex = 0;
+				D3D12_TEXTURE_COPY_LOCATION heightmapSrcLocation = {};
+				heightmapSrcLocation.pResource = m_computeOutputTexture.resource;
+				heightmapSrcLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+				heightmapSrcLocation.SubresourceIndex = 0;
 
-				D3D12_TEXTURE_COPY_LOCATION dstLocation = {};
-				dstLocation.pResource = m_heightmapReadbackBuffer;
-				dstLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-				dstLocation.PlacedFootprint.Offset = 0;
-				dstLocation.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R32_FLOAT;
-				dstLocation.PlacedFootprint.Footprint.Width = 1080;
-				dstLocation.PlacedFootprint.Footprint.Height = 1080;
-				dstLocation.PlacedFootprint.Footprint.Depth = 1;
-				dstLocation.PlacedFootprint.Footprint.RowPitch = 1080 * 4;
+				D3D12_TEXTURE_COPY_LOCATION heightmapDstLocation = {};
+				heightmapDstLocation.pResource = m_heightmapReadbackBuffer;
+				heightmapDstLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+				heightmapDstLocation.PlacedFootprint.Offset = 0;
+				heightmapDstLocation.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R32_FLOAT;
+				heightmapDstLocation.PlacedFootprint.Footprint.Width = 1080;
+				heightmapDstLocation.PlacedFootprint.Footprint.Height = 1080;
+				heightmapDstLocation.PlacedFootprint.Footprint.Depth = 1;
+				heightmapDstLocation.PlacedFootprint.Footprint.RowPitch = 1080 * 4;
 
-				m_commandList->CopyTextureRegion(&dstLocation, 0, 0, 0, &srcLocation, nullptr);
+				m_commandList->CopyTextureRegion(&heightmapDstLocation, 0, 0, 0, &heightmapSrcLocation, nullptr);
 
-				CD3DX12_RESOURCE_BARRIER copyToSrvBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
+				D3D12_TEXTURE_COPY_LOCATION normalmapSrcLocation = {};
+				normalmapSrcLocation.pResource = m_computeNormalMapTexture.resource;
+				normalmapSrcLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+				normalmapSrcLocation.SubresourceIndex = 0;
+
+				D3D12_TEXTURE_COPY_LOCATION normalmapDstLocation = {};
+				normalmapDstLocation.pResource = m_normalmapReadbackBuffer;
+				normalmapDstLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+				normalmapDstLocation.PlacedFootprint.Offset = 0;
+				normalmapDstLocation.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+				normalmapDstLocation.PlacedFootprint.Footprint.Width = 1080;
+				normalmapDstLocation.PlacedFootprint.Footprint.Height = 1080;
+				normalmapDstLocation.PlacedFootprint.Footprint.Depth = 1;
+				normalmapDstLocation.PlacedFootprint.Footprint.RowPitch = 1080 * 4;
+
+				m_commandList->CopyTextureRegion(&normalmapDstLocation, 0, 0, 0, &normalmapSrcLocation, nullptr);
+
+				CD3DX12_RESOURCE_BARRIER copyToSrvBarriers[2];
+				copyToSrvBarriers[0] = CD3DX12_RESOURCE_BARRIER::Transition(
 					m_computeOutputTexture.resource,
 					D3D12_RESOURCE_STATE_COPY_SOURCE,
 					D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-				m_commandList->ResourceBarrier(1, &copyToSrvBarrier);
+				copyToSrvBarriers[1] = CD3DX12_RESOURCE_BARRIER::Transition(
+					m_computeNormalMapTexture.resource,
+					D3D12_RESOURCE_STATE_COPY_SOURCE,
+					D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+				m_commandList->ResourceBarrier(2, copyToSrvBarriers);
 
 				m_saveHeightmapAfterFrame = true;
 			}
 
-			CD3DX12_GPU_DESCRIPTOR_HANDLE srvGpuHandle(
+			CD3DX12_GPU_DESCRIPTOR_HANDLE heightSrvGpuHandle(
 				m_mainDescriptorHeap[m_frameIndex]->GetGPUDescriptorHandleForHeapStart(),
 				2,
 				descriptorSize);
 
-			ImGui::Image((ImTextureID)srvGpuHandle.ptr, ImVec2(540, 540));
+			ImGui::Image((ImTextureID)heightSrvGpuHandle.ptr, ImVec2(540, 540));
 
+			CD3DX12_GPU_DESCRIPTOR_HANDLE normalSrvGpuHandle(
+				m_mainDescriptorHeap[m_frameIndex]->GetGPUDescriptorHandleForHeapStart(),
+				3,
+				descriptorSize);
+
+			ImGui::Image((ImTextureID)normalSrvGpuHandle.ptr, ImVec2(540, 540));
 			ImGui::End();
 		}
 
@@ -1123,6 +1207,8 @@ void TerrainApp::Run()
 
 			SaveHeightmapToPNG("Assets/HeightMap.png");
 			SaveHeightmapToPNG("../../../../Terrain/Assets/HeightMap.png");
+			SaveNormalMapToPNG("Assets/NormalMap.png");
+			SaveNormalMapToPNG("../../../../Terrain/Assets/NormalMap.png");
 			m_saveHeightmapAfterFrame = false;
 		}
 	}
@@ -1545,5 +1631,36 @@ void TerrainApp::SaveHeightmapToPNG(const std::string& filepath)
 	else
 	{
 		std::cout << "Failed to write heightmap to " << filepath << std::endl;
+	}
+}
+
+void TerrainApp::SaveNormalMapToPNG(const std::string& filepath)
+{
+	void* pData = nullptr;
+	D3D12_RANGE readRange = { 0, 1080 * 1080 * 4 };
+	HRESULT hr = m_normalmapReadbackBuffer->Map(0, &readRange, &pData);
+
+	if (FAILED(hr))
+	{
+		std::cout << "Failed to map normal map readback buffer" << std::endl;
+		return;
+	}
+
+	unsigned char* byteData = static_cast<unsigned char*>(pData);
+	std::vector<unsigned char> imageData(1080 * 1080 * 4);
+
+	memcpy(imageData.data(), byteData, 1080 * 1080 * 4);
+
+	D3D12_RANGE writeRange = { 0, 0 };
+	m_normalmapReadbackBuffer->Unmap(0, &writeRange);
+
+	stbi_flip_vertically_on_write(true);
+	if (stbi_write_png(filepath.c_str(), 1080, 1080, 4, imageData.data(), 1080 * 4))
+	{
+		std::cout << "Normal map saved successfully to " << filepath << std::endl;
+	}
+	else
+	{
+		std::cout << "Failed to write normal map to " << filepath << std::endl;
 	}
 }

@@ -8,41 +8,6 @@ set( SHADER_FILES
 
 source_group( "Resources\\Shaders" FILES ${SHADER_FILES} )
 
-# Set shader properties for Visual Studio
-set_source_files_properties( Shaders/Vertex.hlsl PROPERTIES 
-    VS_SHADER_TYPE Vertex
-    VS_SHADER_MODEL 6.0
-    VS_SHADER_OBJECT_FILE_NAME ""
-    VS_TOOL_OVERRIDE "None"
-)
-set_source_files_properties( Shaders/Pixel.hlsl PROPERTIES 
-    VS_SHADER_TYPE Pixel
-    VS_SHADER_MODEL 6.0
-    VS_SHADER_OBJECT_FILE_NAME ""
-    VS_TOOL_OVERRIDE "None"
-)
-
-set_source_files_properties( Shaders/Hull.hlsl PROPERTIES 
-    VS_SHADER_TYPE Hull
-    VS_SHADER_MODEL 6.0
-    VS_SHADER_OBJECT_FILE_NAME ""
-    VS_TOOL_OVERRIDE "None"
-)
-
-set_source_files_properties( Shaders/Domain.hlsl PROPERTIES 
-    VS_SHADER_TYPE Domain
-    VS_SHADER_MODEL 6.0
-    VS_SHADER_OBJECT_FILE_NAME ""
-    VS_TOOL_OVERRIDE "None"
-)
-
-set_source_files_properties( Shaders/Domain.hlsl PROPERTIES 
-    VS_SHADER_TYPE Compute
-    VS_SHADER_MODEL 6.0
-    VS_SHADER_OBJECT_FILE_NAME ""
-    VS_TOOL_OVERRIDE "None"
-)
-
 # Add source to this project's executable
 add_executable(Terrain 
 "Main.cpp" 
