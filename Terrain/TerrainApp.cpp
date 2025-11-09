@@ -712,7 +712,7 @@ TerrainApp::TerrainApp()
 
 	// ------------------------------------------------ Baked Heightmap & Normal Map Loading ------------------------------------------------
 
-	m_bakedHeightmapTexture.LoadFromFile(m_device, m_commandList, "Assets/HeightMap.png", DXGI_FORMAT_R8_UNORM);
+	m_bakedHeightmapTexture.LoadFromFile(m_device, m_commandList, "Assets/HeightMap.png", DXGI_FORMAT_R32_FLOAT);
 	m_bakedNormalMapTexture.LoadFromFile(m_device, m_commandList, "Assets/NormalMap.png");
 
 	for (int i = 0; i < FRAMES_IN_FLIGHT; ++i)
@@ -1164,16 +1164,38 @@ void TerrainApp::Run()
 
 				m_commandList->CopyTextureRegion(&normalmapDstLocation, 0, 0, 0, &normalmapSrcLocation, nullptr);
 
-				CD3DX12_RESOURCE_BARRIER copyToSrvBarriers[2];
-				copyToSrvBarriers[0] = CD3DX12_RESOURCE_BARRIER::Transition(
+				CD3DX12_RESOURCE_BARRIER bakedTexturesToCopyDestBarriers[2];
+				bakedTexturesToCopyDestBarriers[0] = CD3DX12_RESOURCE_BARRIER::Transition(
+					m_bakedHeightmapTexture.resource,
+					D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+					D3D12_RESOURCE_STATE_COPY_DEST);
+				bakedTexturesToCopyDestBarriers[1] = CD3DX12_RESOURCE_BARRIER::Transition(
+					m_bakedNormalMapTexture.resource,
+					D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+					D3D12_RESOURCE_STATE_COPY_DEST);
+				m_commandList->ResourceBarrier(2, bakedTexturesToCopyDestBarriers);
+
+				m_commandList->CopyResource(m_bakedHeightmapTexture.resource, m_computeOutputTexture.resource);
+				m_commandList->CopyResource(m_bakedNormalMapTexture.resource, m_computeNormalMapTexture.resource);
+
+				CD3DX12_RESOURCE_BARRIER allTexturesToSrvBarriers[4];
+				allTexturesToSrvBarriers[0] = CD3DX12_RESOURCE_BARRIER::Transition(
 					m_computeOutputTexture.resource,
 					D3D12_RESOURCE_STATE_COPY_SOURCE,
 					D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-				copyToSrvBarriers[1] = CD3DX12_RESOURCE_BARRIER::Transition(
+				allTexturesToSrvBarriers[1] = CD3DX12_RESOURCE_BARRIER::Transition(
 					m_computeNormalMapTexture.resource,
 					D3D12_RESOURCE_STATE_COPY_SOURCE,
 					D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-				m_commandList->ResourceBarrier(2, copyToSrvBarriers);
+				allTexturesToSrvBarriers[2] = CD3DX12_RESOURCE_BARRIER::Transition(
+					m_bakedHeightmapTexture.resource,
+					D3D12_RESOURCE_STATE_COPY_DEST,
+					D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+				allTexturesToSrvBarriers[3] = CD3DX12_RESOURCE_BARRIER::Transition(
+					m_bakedNormalMapTexture.resource,
+					D3D12_RESOURCE_STATE_COPY_DEST,
+					D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+				m_commandList->ResourceBarrier(4, allTexturesToSrvBarriers);
 
 				m_saveHeightmapAfterFrame = true;
 			}

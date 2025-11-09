@@ -1,6 +1,7 @@
 #include "Texture.h"
 #include "Include/d3dx12.h"
 #include <iostream>
+#include <vector>
 
 Image::~Image()
 {
@@ -36,14 +37,14 @@ void Texture::LoadFromFile(
     int desiredChannels = STBI_rgb_alpha;
     int bytesPerPixel = 4;
 
-    if (textureFormat == DXGI_FORMAT_R8_UNORM)
+    if (textureFormat == DXGI_FORMAT_R8_UNORM || textureFormat == DXGI_FORMAT_R32_FLOAT)
     {
         desiredChannels = STBI_grey;
-        bytesPerPixel = 1;
+        bytesPerPixel = (textureFormat == DXGI_FORMAT_R32_FLOAT) ? 4 : 1;
     }
 
     Image img;
-    img.LoadImageFromFile(filepath, flip, desiredChannels);
+    img.LoadImageFromFile(filepath, flip, textureFormat == DXGI_FORMAT_R32_FLOAT ? STBI_grey : desiredChannels);
 
     format = textureFormat;
     width = img.width;
@@ -92,8 +93,21 @@ void Texture::LoadFromFile(
     if (FAILED(hr))
         return;
 
+    void* pData = img.bytes;
+    std::vector<float> convertedData;
+    if (textureFormat == DXGI_FORMAT_R32_FLOAT)
+    {
+        convertedData.resize(width * height);
+        unsigned char* srcData = reinterpret_cast<unsigned char*>(img.bytes);
+        for (int i = 0; i < width * height; i++)
+        {
+            convertedData[i] = srcData[i] / 255.0f;
+        }
+        pData = convertedData.data();
+    }
+
     D3D12_SUBRESOURCE_DATA textureData = {};
-    textureData.pData = img.bytes;
+    textureData.pData = pData;
     textureData.RowPitch = width * bytesPerPixel;
     textureData.SlicePitch = width * bytesPerPixel * height;
 
