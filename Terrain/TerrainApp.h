@@ -1,18 +1,8 @@
 #pragma once
-
-#define NOMINMAX
-#include <windows.h>
-#include <iostream>
-#include <iomanip>
-#include <ctime>
-#include <vector>
-
-#include <d3d12.h>
-#include <dxgi1_4.h>
-#include <DirectXMath.h>
-#include "Include/d3dx12.h"
+#include "Core.h"
 #include "Camera.h"
 #include "Texture.h"
+#include "ShaderCompiler.h"
 
 #define FRAMES_IN_FLIGHT 3
 
@@ -33,24 +23,6 @@ public:
 private:
 
 	void WaitForPreviousFrame();
-
-	// ------------------------ Shader Compilation ------------------------
-
-	enum class ShaderType
-	{
-		Vertex,
-		Pixel,
-		Compute,
-		Hull,
-		Domain
-	};
-
-	struct ShaderData 
-	{
-		std::vector<uint32_t> bytecode;
-	};
-
-	void CompileShaderFromFile(const std::string& path, ShaderType shaderType, ShaderData& outShaderData, const std::vector<std::pair<std::wstring, std::wstring>>& defines = {});
 
 	void SaveHeightmapToPNG(const std::string& filepath);
 	void SaveNormalMapToPNG(const std::string& filepath);
