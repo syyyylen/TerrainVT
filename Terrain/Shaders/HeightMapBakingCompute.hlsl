@@ -97,14 +97,13 @@ cbuffer ConstantBuffer : register(b0)
     float3 padding;
 };
 
-RWTexture2D<float> OutputTexture : register(u0);
-RWTexture2D<float4> NormalMapTexture : register(u1);
+RWTexture2D<float> OutHeightMap : register(u0);
 
 [numthreads(8, 8, 1)]
 void main(uint3 DTid : SV_DispatchThreadID)
 {
     uint width, height;
-    OutputTexture.GetDimensions(width, height);
+    OutHeightMap.GetDimensions(width, height);
 
     if (DTid.x >= width || DTid.y >= height)
         return;
@@ -115,19 +114,5 @@ void main(uint3 DTid : SV_DispatchThreadID)
     float scale = noise_scale;
     float noise = fbm(u * scale, v * scale, noise_octaves, noise_persistence, noise_lacunarity);
 
-    OutputTexture[DTid.xy] = noise;
-
-    float delta = 0.01;
-
-    float heightL = fbm((u - delta) * scale, v * scale, noise_octaves, noise_persistence, noise_lacunarity) * noise_height;
-    float heightR = fbm((u + delta) * scale, v * scale, noise_octaves, noise_persistence, noise_lacunarity) * noise_height;
-    float heightD = fbm(u * scale, (v - delta) * scale, noise_octaves, noise_persistence, noise_lacunarity) * noise_height;
-    float heightU = fbm(u * scale, (v + delta) * scale, noise_octaves, noise_persistence, noise_lacunarity) * noise_height;
-
-    float3 tangentX = float3(2.0 * delta, heightR - heightL, 0.0);
-    float3 tangentZ = float3(0.0, heightU - heightD, 2.0 * delta);
-
-    float3 normal = normalize(cross(tangentZ, tangentX));
-
-    NormalMapTexture[DTid.xy] = float4(normal * 0.5 + 0.5, 1.0);
+    OutHeightMap[DTid.xy] = noise;
 }

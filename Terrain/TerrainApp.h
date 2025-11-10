@@ -25,7 +25,6 @@ private:
 	void WaitForPreviousFrame();
 
 	void SaveHeightmapToPNG(const std::string& filepath);
-	void SaveNormalMapToPNG(const std::string& filepath);
 
 	// ------------------------ Render Data Structures ------------------------
 
@@ -126,9 +125,7 @@ private:
 
 	Texture m_albedoTexture = {};
 	Texture m_computeOutputTexture = {};
-	Texture m_computeNormalMapTexture = {};
 	Texture m_bakedHeightmapTexture = {};
-	Texture m_bakedNormalMapTexture = {};
 
 #if ENABLE_IMGUI
 	static const int IMGUI_DESCRIPTOR_OFFSET = 20;

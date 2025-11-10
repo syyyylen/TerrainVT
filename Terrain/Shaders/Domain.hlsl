@@ -118,8 +118,7 @@ cbuffer ConstantBuffer : register(b0)
     float2 padding;
 };
 
-Texture2D bakedHeightMap : register(t1);
-Texture2D bakedNormalMap : register(t2);
+Texture2D heightMap : register(t1);
 SamplerState samplerState : register(s0);
 
 [domain("tri")]
@@ -139,26 +138,11 @@ DSOutput main(HSConstantOutput input, float3 bary : SV_DomainLocation, const Out
         float noise = fbm(output.uv.x * scale, output.uv.y * scale, noise_octaves, noise_persistence, noise_lacunarity);
     
         pos.y += noise * noise_height;
-    
-        float delta = 0.01;
-    
-        float heightL = fbm((output.uv.x - delta) * scale, output.uv.y * scale, noise_octaves, noise_persistence, noise_lacunarity) * noise_height;
-        float heightR = fbm((output.uv.x + delta) * scale, output.uv.y * scale, noise_octaves, noise_persistence, noise_lacunarity) * noise_height;
-        float heightD = fbm(output.uv.x * scale, (output.uv.y - delta) * scale, noise_octaves, noise_persistence, noise_lacunarity) * noise_height;
-        float heightU = fbm(output.uv.x * scale, (output.uv.y + delta) * scale, noise_octaves, noise_persistence, noise_lacunarity) * noise_height;
-    
-        float3 tangentX = float3(2.0 * delta, heightR - heightL, 0.0);
-        float3 tangentZ = float3(0.0, heightU - heightD, 2.0 * delta);
-    
-        output.normal = normalize(cross(tangentZ, tangentX));
     }
     else
     {
-        float sampledHeight = bakedHeightMap.SampleLevel(samplerState, output.uv, 0).r;
+        float sampledHeight = heightMap.SampleLevel(samplerState, output.uv, 0).r;
         pos.y += sampledHeight * noise_height;
-
-        float3 sampledNormal = bakedNormalMap.SampleLevel(samplerState, output.uv, 0).rgb;
-        output.normal = normalize(sampledNormal * 2.0 - 1.0);
     }
     
     output.worldPos = pos;

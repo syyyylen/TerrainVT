@@ -4,6 +4,7 @@ set( SHADER_FILES
     Shaders/Pixel.hlsl
     Shaders/Hull.hlsl
     Shaders/Domain.hlsl
+    Shaders/HeightMapBakingCompute.hlsl
 )
 
 source_group( "Resources\\Shaders" FILES ${SHADER_FILES} )

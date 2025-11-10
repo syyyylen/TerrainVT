@@ -11,13 +11,7 @@ SamplerState s1 : register(s0);
 
 float4 main(DSOutput input) : SV_TARGET
 {
-    float ambient = 0.2;
-    float3 n = normalize(input.normal);
-    float3 l = normalize(float3(0.0f, 1.0f, 0.4f));
-    float diffuse = saturate(dot(n, l));
-    float lighting = ambient + diffuse * (1.0 - ambient);
-
-    float3 finalColor = diffuseTexture.Sample(s1, input.uv).rgb * lighting;
+    float3 finalColor = diffuseTexture.Sample(s1, input.uv).rgb;
 
     return float4(finalColor, 1.0f);
 }
