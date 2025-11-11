@@ -571,8 +571,11 @@ TerrainApp::TerrainApp()
 
 	// ------------------------------------------------ Terrain Base Mesh Generation ------------------------------------------------
 
-	const float PLANE_SIZE = 400.0f;
-	const float QUAD_SIZE = 10.0f;
+	/*const float PLANE_SIZE = 1000.0f;
+	const float QUAD_SIZE = 20.0f;*/
+
+	const float PLANE_SIZE = 10.0f;
+	const float QUAD_SIZE = 2.0f;
 	const int GRID_DIVISIONS = static_cast<int>(PLANE_SIZE / QUAD_SIZE);
 
 	std::vector<Vertex> vList;
@@ -826,7 +829,7 @@ TerrainApp::TerrainApp()
 	m_constantBuffer.noise_persistence = 0.38f;
 	m_constantBuffer.noise_lacunarity = 2.6f;
 	m_constantBuffer.noise_scale = 3.0f;
-	m_constantBuffer.noise_height = 80.0f;
+	m_constantBuffer.noise_height = 110.0f;
 	m_constantBuffer.noise_octaves = 5;
 	m_constantBuffer.runtime_noise = m_runtimeNoiseAtStart;
 
@@ -1023,6 +1026,7 @@ void TerrainApp::Run()
 
 		ImGui::Begin("FrameRate");
 		ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+		ImGui::SliderFloat("Move Speed", &m_cameraMoveSpeed, 1.0f, 100.0f);
 		ImGui::Text("Pre-tesselation Vertex Count: %d", m_vertexCount);
 		const int tessFactor = 64;
 		int baseTriangles = m_vertexCount / 3;
@@ -1037,7 +1041,7 @@ void TerrainApp::Run()
 			ImGui::SliderFloat("Persistence", &m_constantBuffer.noise_persistence, 0.0f, 1.0f);
 			ImGui::SliderFloat("Lacunarity", &m_constantBuffer.noise_lacunarity, 1.0f, 6.0f);
 			ImGui::SliderFloat("Scale", &m_constantBuffer.noise_scale, 0.1f, 10.0f);
-			ImGui::SliderFloat("Height", &m_constantBuffer.noise_height, 1.0f, 150.0f);
+			ImGui::SliderFloat("Height", &m_constantBuffer.noise_height, 1.0f, 300.0f);
 			ImGui::SliderInt("Octaves", &m_constantBuffer.noise_octaves, 1, 8);
 			ImGui::End();
 

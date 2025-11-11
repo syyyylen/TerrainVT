@@ -11,7 +11,8 @@ SamplerState s1 : register(s0);
 
 float4 main(DSOutput input) : SV_TARGET
 {
-    float3 finalColor = diffuseTexture.Sample(s1, input.uv).rgb;
-
-    return float4(finalColor, 1.0f);
+    return float4(input.uv, 0.0f, 1.0f);
+    
+    // float3 finalColor = diffuseTexture.Sample(s1, input.uv).rgb;
+    // return float4(finalColor, 1.0f);
 }

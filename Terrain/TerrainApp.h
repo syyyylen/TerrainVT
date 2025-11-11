@@ -85,7 +85,7 @@ private:
 	Camera m_camera = {};
 	float m_cameraForward = 0.0f;
 	float m_cameraRight = 0.0f;
-	float m_cameraMoveSpeed = 80.0f;
+	float m_cameraMoveSpeed = 12.0f;
 
 	// ------------------------ D3D12 ------------------------
 
