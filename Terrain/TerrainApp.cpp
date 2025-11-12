@@ -1058,7 +1058,7 @@ void TerrainApp::Run()
 
 		m_commandList->OMSetRenderTargets(1, &rtHandle, false, &dsvHandle);
 
-		const float rtClearColor[] = { 1.f, 1.0f, 0.0f, 1.0f };
+		const float rtClearColor[] = { 0.f, 0.0f, 0.0f, 1.0f };
 		m_commandList->ClearRenderTargetView(rtHandle, rtClearColor, 0, nullptr);
 		m_commandList->ClearDepthStencilView(m_dsDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 

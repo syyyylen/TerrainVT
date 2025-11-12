@@ -8,5 +8,13 @@ struct DSOutput
 
 float4 main(DSOutput input) : SV_TARGET
 {
-    return float4(0.0f, 1.0f, 0.0f, 1.0f);
+    const int textureSize = 16; // 16x16px tex
+    const int pageSize = 4; // 4x4px pages
+    
+    float2 rqPx = floor(input.uv * textureSize);
+    float2 rqPage = floor(rqPx / pageSize);
+    
+    return float4(rqPage / 16, 0.0f, 1.0f);
+    
+    // return float4(input.uv, 0.0f, 1.0f);
 }
