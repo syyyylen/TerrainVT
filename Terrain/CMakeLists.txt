@@ -5,6 +5,8 @@ set( SHADER_FILES
     Shaders/Hull.hlsl
     Shaders/Domain.hlsl
     Shaders/HeightMapBakingCompute.hlsl
+    Shaders/PerlinNoise.hlsli
+    Shaders/PixelVT.hlsl
 )
 
 source_group( "Resources\\Shaders" FILES ${SHADER_FILES} )

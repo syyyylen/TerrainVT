@@ -124,6 +124,7 @@ private:
 	ID3D12Resource* m_heightmapReadbackBuffer = nullptr;
 	ID3D12Resource* m_normalmapReadbackBuffer = nullptr;
 	bool m_saveHeightmapAfterFrame = false;
+	ID3D12PipelineState* m_renderToTexturePSO = nullptr;
 
 	Texture m_renderTexture = {};
 	Texture m_albedoTexture = {};

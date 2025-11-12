@@ -458,8 +458,16 @@ TerrainApp::TerrainApp()
 	domainShaderBytecode.BytecodeLength = domainShaderData.bytecode.size() * sizeof(uint32_t);
 	domainShaderBytecode.pShaderBytecode = domainShaderData.bytecode.data();
 
+	// VT Shaders
 
-	// ------------------------------------------------ D3D12 Init (PSO) ------------------------------------------------
+	ShaderData pixelVTShaderData = {};
+	ShaderCompiler::CompileShaderFromFile("Shaders/PixelVT.hlsl", ShaderType::Pixel, pixelVTShaderData);
+
+	D3D12_SHADER_BYTECODE pixelVTShaderBytecode = {};
+	pixelVTShaderBytecode.BytecodeLength = pixelVTShaderData.bytecode.size() * sizeof(uint32_t);
+	pixelVTShaderBytecode.pShaderBytecode = pixelVTShaderData.bytecode.data();
+
+	// ------------------------------------------------ D3D12 Init (PSOs) ------------------------------------------------
 
 	D3D12_INPUT_ELEMENT_DESC inputLayout[] =
 	{
@@ -490,6 +498,30 @@ TerrainApp::TerrainApp()
 	psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
 
 	hr = m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pipelineStateObject));
+
+	if (FAILED(hr))
+	{
+		return;
+	}
+
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC rtPsoDesc = {};
+	rtPsoDesc.InputLayout = inputLayoutDesc;
+	rtPsoDesc.pRootSignature = m_rootSignature;
+	rtPsoDesc.VS = vertexShaderBytecode;
+	rtPsoDesc.PS = pixelVTShaderBytecode; // Change only PS for VT page query
+	rtPsoDesc.HS = hullShaderBytecode;
+	rtPsoDesc.DS = domainShaderBytecode;
+	rtPsoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_PATCH;
+	rtPsoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+	rtPsoDesc.SampleDesc = sampleDesc;
+	rtPsoDesc.SampleMask = 0xffffffff;
+	rtPsoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+	rtPsoDesc.RasterizerState.FillMode = m_drawWireframe ? D3D12_FILL_MODE_WIREFRAME : D3D12_FILL_MODE_SOLID;
+	rtPsoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+	rtPsoDesc.NumRenderTargets = 1;
+	rtPsoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+
+	hr = m_device->CreateGraphicsPipelineState(&rtPsoDesc, IID_PPV_ARGS(&m_renderToTexturePSO));
 
 	if (FAILED(hr))
 	{
@@ -1022,11 +1054,29 @@ void TerrainApp::Run()
 		m_commandList->ResourceBarrier(1, &srvToRtTransition);
 
 		CD3DX12_CPU_DESCRIPTOR_HANDLE rtHandle(m_rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), FRAMES_IN_FLIGHT, m_rtvDescriptorSize);
+		CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(m_dsDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
 
-		m_commandList->OMSetRenderTargets(1, &rtHandle, false, nullptr);
+		m_commandList->OMSetRenderTargets(1, &rtHandle, false, &dsvHandle);
 
 		const float rtClearColor[] = { 1.f, 1.0f, 0.0f, 1.0f };
 		m_commandList->ClearRenderTargetView(rtHandle, rtClearColor, 0, nullptr);
+		m_commandList->ClearDepthStencilView(m_dsDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+
+		m_commandList->SetPipelineState(m_renderToTexturePSO);
+
+		m_commandList->SetGraphicsRootSignature(m_rootSignature);
+
+		ID3D12DescriptorHeap* descriptorHeaps[] = { m_mainDescriptorHeap[m_frameIndex] };
+		m_commandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
+
+		m_commandList->SetGraphicsRootDescriptorTable(0, m_mainDescriptorHeap[m_frameIndex]->GetGPUDescriptorHandleForHeapStart());
+
+		m_commandList->RSSetViewports(1, &m_viewport);
+		m_commandList->RSSetScissorRects(1, &m_scissorRect);
+		m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST);
+		m_commandList->IASetIndexBuffer(&m_indexBufferView);
+		m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
+		m_commandList->DrawIndexedInstanced(m_indexCount, 1, 0, 0, 0);
 
 		CD3DX12_RESOURCE_BARRIER rtToSrvTransition = CD3DX12_RESOURCE_BARRIER::Transition(m_renderTexture.resource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
@@ -1037,17 +1087,17 @@ void TerrainApp::Run()
 		m_commandList->ResourceBarrier(1, &presentToRtTransition);
 
 		CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), m_frameIndex, m_rtvDescriptorSize);
-		CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(m_dsDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
 
-		m_commandList->OMSetRenderTargets(1, &rtvHandle, false, nullptr);
+		m_commandList->OMSetRenderTargets(1, &rtvHandle, false, &dsvHandle);
 
 		const float clearColor[] = { 0.0f, 0.0f, 0.1f, 1.0f };
 		m_commandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
 		m_commandList->ClearDepthStencilView(m_dsDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
+		m_commandList->SetPipelineState(m_pipelineStateObject);
+
 		m_commandList->SetGraphicsRootSignature(m_rootSignature);
 
-		ID3D12DescriptorHeap* descriptorHeaps[] = { m_mainDescriptorHeap[m_frameIndex] };
 		m_commandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
 
 		m_commandList->SetGraphicsRootDescriptorTable(0, m_mainDescriptorHeap[m_frameIndex]->GetGPUDescriptorHandleForHeapStart());
