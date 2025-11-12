@@ -858,6 +858,31 @@ TerrainApp::TerrainApp()
 
 	m_commandList->ResourceBarrier(1, RTbarriers);
 
+	// ------------------------------------------------ VT Main Memory Texture ------------------------------------------------
+
+	m_VTMainMemoryTexture.CreateEmpty(
+		m_device,
+		16,
+		16,
+		DXGI_FORMAT_R8G8B8A8_UNORM,
+		D3D12_RESOURCE_FLAG_NONE,
+		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+
+	for (int i = 0; i < FRAMES_IN_FLIGHT; ++i)
+	{
+		CD3DX12_CPU_DESCRIPTOR_HANDLE renderTextureSrvHandle(
+			m_mainDescriptorHeap[i]->GetCPUDescriptorHandleForHeapStart(),
+			7, // VT Main Memory Texture (ImGui use only atm)
+			descriptorSize);
+
+		m_VTMainMemoryTexture.CreateSRV(m_device, renderTextureSrvHandle);
+	}
+
+	CD3DX12_RESOURCE_BARRIER VTtoSrvBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
+		m_VTMainMemoryTexture.resource,
+		D3D12_RESOURCE_STATE_COMMON,
+		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+
 	// ------------------------------------------------ D3D12 Init Execute Commands ------------------------------------------------
 
 	m_commandList->Close();
@@ -989,6 +1014,8 @@ TerrainApp::~TerrainApp()
 	m_albedoTexture.Release();
 	m_computeOutputTexture.Release();
 	m_bakedHeightmapTexture.Release();
+	m_renderTexture.Release();
+	m_VTMainMemoryTexture.Release();
 
 	if (m_heightmapReadbackBuffer)
 		m_heightmapReadbackBuffer->Release();
@@ -1190,6 +1217,26 @@ void TerrainApp::Run()
 			descriptorSize);
 
 		ImGui::Image((ImTextureID)rtSrvGpuHandle.ptr, ImVec2(m_width / 2, m_height / 2));
+
+		ImGui::End();
+
+		ImGui::Begin("VT Main Memory Texture");
+
+		if (ImGui::Button("Load VT Page In VRAM"))
+		{
+			for (const auto& coord : m_VTpagesRequestResult.requestedPages) 
+			{
+				// TODO Load tiles in VT main memory texture
+				// Needs a texture format which supports random access
+			}
+		}
+
+		CD3DX12_GPU_DESCRIPTOR_HANDLE VTSrvGpuHandle(
+			m_mainDescriptorHeap[m_frameIndex]->GetGPUDescriptorHandleForHeapStart(),
+			7, // VT Main Memory Texture SRV
+			descriptorSize);
+
+		ImGui::Image((ImTextureID)VTSrvGpuHandle.ptr, ImVec2(320, 320));
 
 		ImGui::End();
 

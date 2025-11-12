@@ -104,35 +104,46 @@ private:
 	ID3D12Resource* m_renderTargets[FRAMES_IN_FLIGHT] = {};
 	ID3D12CommandAllocator* m_commandAllocators[FRAMES_IN_FLIGHT] = {};
 	ID3D12GraphicsCommandList* m_commandList = nullptr;
+	int m_rtvDescriptorSize = 0;
+	ID3D12PipelineState* m_pipelineStateObject = nullptr;
+	ID3D12RootSignature* m_rootSignature = nullptr;
+	ID3D12Resource* m_depthStencilBuffer = nullptr;
+	ID3D12DescriptorHeap* m_dsDescriptorHeap = nullptr;
+	ID3D12DescriptorHeap* m_mainDescriptorHeap[FRAMES_IN_FLIGHT] = {};
+	D3D12_VIEWPORT m_viewport = {};
+	D3D12_RECT m_scissorRect = {};
+
+	// Fence
 	ID3D12Fence* m_fences[FRAMES_IN_FLIGHT] = {};
 	HANDLE m_fenceEvent = nullptr;
 	UINT64 m_fenceValues[FRAMES_IN_FLIGHT] = {};
 	int m_frameIndex = 0;
-	int m_rtvDescriptorSize = 0;
-	ID3D12PipelineState* m_pipelineStateObject = nullptr;
-	ID3D12RootSignature* m_rootSignature = nullptr;
-	D3D12_VIEWPORT m_viewport = {};
-	D3D12_RECT m_scissorRect = {};
+
+	// VB/IB
 	ID3D12Resource* m_vertexBuffer = nullptr;
 	D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView = {};
 	int m_vertexCount = 0;
 	ID3D12Resource* m_indexBuffer = nullptr;
 	D3D12_INDEX_BUFFER_VIEW m_indexBufferView = {};
 	int m_indexCount = 0;
-	ID3D12Resource* m_depthStencilBuffer = nullptr;
-	ID3D12DescriptorHeap* m_dsDescriptorHeap = nullptr;
-	ID3D12DescriptorHeap* m_mainDescriptorHeap[FRAMES_IN_FLIGHT] = {};
+
+	// Constant Buffer
 	ID3D12Resource* m_constantBufferUploadHeap[FRAMES_IN_FLIGHT] = {};
 	ConstantBuffer m_constantBuffer = {};
 	UINT8* m_constantBufferGPUAddress[FRAMES_IN_FLIGHT] = {};
+
+	// Compute Pipeline
 	ID3D12RootSignature* m_computeRootSignature = nullptr;
 	ID3D12PipelineState* m_computePipelineState = nullptr;
 	ID3D12Resource* m_heightmapReadbackBuffer = nullptr;
 	bool m_saveHeightmapAfterFrame = false;
+
+	// VT
 	ID3D12PipelineState* m_renderToTexturePSO = nullptr;
 	ID3D12Resource* m_VTpagesRequestReadBackBuffer = nullptr;
 	VTPageRequestResult m_VTpagesRequestResult = {};
 	bool m_checkVTpagesRequestAfterFrame = false;
+	Texture m_VTMainMemoryTexture = {};
 
 	Texture m_renderTexture = {};
 	Texture m_albedoTexture = {};
