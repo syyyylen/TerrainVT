@@ -68,8 +68,8 @@ TerrainApp::TerrainApp()
 		return;
 	}
 
-	int width = 1920;
-	int height = 1080;
+	int width = m_width;
+	int height = m_height;
 
 	m_hwnd = ::CreateWindowExW(
 		WS_EX_OVERLAPPEDWINDOW,
@@ -1025,7 +1025,7 @@ void TerrainApp::Run()
 
 		m_commandList->OMSetRenderTargets(1, &rtHandle, false, nullptr);
 
-		const float rtClearColor[] = { 1.0f, 1.0f, 0.0f, 1.0f };
+		const float rtClearColor[] = { 1.f, 1.0f, 0.0f, 1.0f };
 		m_commandList->ClearRenderTargetView(rtHandle, rtClearColor, 0, nullptr);
 
 		CD3DX12_RESOURCE_BARRIER rtToSrvTransition = CD3DX12_RESOURCE_BARRIER::Transition(m_renderTexture.resource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
@@ -1039,7 +1039,7 @@ void TerrainApp::Run()
 		CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), m_frameIndex, m_rtvDescriptorSize);
 		CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(m_dsDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
 
-		m_commandList->OMSetRenderTargets(1, &rtvHandle, false, &dsvHandle);
+		m_commandList->OMSetRenderTargets(1, &rtvHandle, false, nullptr);
 
 		const float clearColor[] = { 0.0f, 0.0f, 0.1f, 1.0f };
 		m_commandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
@@ -1061,9 +1061,9 @@ void TerrainApp::Run()
 
 #if ENABLE_IMGUI
 
-		// ------------------------------------------------ ImGui Commands ------------------------------------------------
-
 		m_commandList->OMSetRenderTargets(1, &rtvHandle, false, nullptr);
+
+		// ------------------------------------------------ ImGui Commands ------------------------------------------------
 
 		ImGui_ImplDX12_NewFrame();
 		ImGui_ImplWin32_NewFrame();
@@ -1089,7 +1089,7 @@ void TerrainApp::Run()
 			6, // Render Texture SRV
 			descriptorSize);
 
-		ImGui::Image((ImTextureID)rtSrvGpuHandle.ptr, ImVec2(540, 540));
+		ImGui::Image((ImTextureID)rtSrvGpuHandle.ptr, ImVec2(m_width / 2, m_height / 2));
 
 		ImGui::End();
 
@@ -1378,6 +1378,9 @@ void TerrainApp::OnWindowResize(int width, int height)
 	m_camera.UpdatePerspectiveFOV(0.35f * 3.14159f, (float)width / (float)height);
 
 	m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
+
+	m_width = width;
+	m_height = height;
 }
 
 void TerrainApp::WaitForPreviousFrame()

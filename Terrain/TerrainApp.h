@@ -73,10 +73,12 @@ private:
 	// ------------------------ App Global Settings ------------------------
 
 	bool m_drawWireframe = false;
-	bool m_maximizeAtStart = false;
+	bool m_maximizeAtStart = true;
 	bool m_runtimeNoiseAtStart = false;
 
 	HWND m_hwnd = nullptr;
+	int m_width = 1920;
+	int m_height = 1080;
 	bool m_isRunning = false;
 	float m_startTime = 0.0f;
 	float m_lastTime = 0.0f;
