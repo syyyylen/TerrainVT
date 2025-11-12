@@ -25,6 +25,7 @@ private:
 	void WaitForPreviousFrame();
 
 	void SaveHeightmapToPNG(const std::string& filepath);
+	void BuildVTPageRequestResult();
 
 	// ------------------------ Render Data Structures ------------------------
 
@@ -44,6 +45,11 @@ private:
 	{
 		DirectX::XMFLOAT3 pos;
 		DirectX::XMFLOAT2 uv;
+	};
+
+	struct VTPageRequestResult 
+	{
+		std::set<DirectX::XMFLOAT2> requestedPages;
 	};
 
 	// ------------------------ Input Handling ------------------------
@@ -73,7 +79,7 @@ private:
 	// ------------------------ App Global Settings ------------------------
 
 	bool m_drawWireframe = false;
-	bool m_maximizeAtStart = true;
+	bool m_maximizeAtStart = false;
 	bool m_runtimeNoiseAtStart = false;
 
 	HWND m_hwnd = nullptr;
@@ -122,9 +128,11 @@ private:
 	ID3D12RootSignature* m_computeRootSignature = nullptr;
 	ID3D12PipelineState* m_computePipelineState = nullptr;
 	ID3D12Resource* m_heightmapReadbackBuffer = nullptr;
-	ID3D12Resource* m_normalmapReadbackBuffer = nullptr;
 	bool m_saveHeightmapAfterFrame = false;
 	ID3D12PipelineState* m_renderToTexturePSO = nullptr;
+	ID3D12Resource* m_VTpagesRequestReadBackBuffer = nullptr;
+	VTPageRequestResult m_VTpagesRequestResult = {};
+	bool m_checkVTpagesRequestAfterFrame = false;
 
 	Texture m_renderTexture = {};
 	Texture m_albedoTexture = {};

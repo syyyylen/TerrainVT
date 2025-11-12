@@ -798,26 +798,13 @@ TerrainApp::TerrainApp()
 
 	m_heightmapReadbackBuffer->SetName(L"Heightmap Readback Buffer");
 
-	hr = m_device->CreateCommittedResource(
-		&readbackHeapProps,
-		D3D12_HEAP_FLAG_NONE,
-		&readbackBufferDesc,
-		D3D12_RESOURCE_STATE_COPY_DEST,
-		nullptr,
-		IID_PPV_ARGS(&m_normalmapReadbackBuffer));
-
-	if (FAILED(hr))
-	{
-		return;
-	}
-
-	m_normalmapReadbackBuffer->SetName(L"Normalmap Readback Buffer");
-
-	CD3DX12_RESOURCE_BARRIER barriers[2];
+	CD3DX12_RESOURCE_BARRIER barriers[1];
 	barriers[0] = CD3DX12_RESOURCE_BARRIER::Transition(
 		m_computeOutputTexture.resource,
 		D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
 		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+
+	m_commandList->ResourceBarrier(1, barriers);
 
 	// ------------------------------------------------ Render To Texture Init ------------------------------------------------
 
@@ -841,11 +828,35 @@ TerrainApp::TerrainApp()
 		m_renderTexture.CreateSRV(m_device, renderTextureSrvHandle);
 	}
 
-	CD3DX12_RESOURCE_BARRIER barrier;
-	barrier = CD3DX12_RESOURCE_BARRIER::Transition(
+	D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint;
+	UINT64 RTreadbackBufferSize;
+	m_renderTexture.GetFootprint(m_device, footprint, RTreadbackBufferSize);
+
+	CD3DX12_RESOURCE_DESC RTreadbackBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(RTreadbackBufferSize);
+
+	hr = m_device->CreateCommittedResource(
+		&readbackHeapProps,
+		D3D12_HEAP_FLAG_NONE,
+		&RTreadbackBufferDesc,
+		D3D12_RESOURCE_STATE_COPY_DEST,
+		nullptr,
+		IID_PPV_ARGS(&m_VTpagesRequestReadBackBuffer));
+
+	if (FAILED(hr))
+	{
+		return;
+	}
+
+	m_VTpagesRequestReadBackBuffer->SetName(L"VT Page Request Readback Buffer");
+
+	CD3DX12_RESOURCE_BARRIER RTbarriers[1];
+
+	RTbarriers[0] = CD3DX12_RESOURCE_BARRIER::Transition(
 		m_renderTexture.resource,
 		D3D12_RESOURCE_STATE_RENDER_TARGET,
 		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+
+	m_commandList->ResourceBarrier(1, RTbarriers);
 
 	// ------------------------------------------------ D3D12 Init Execute Commands ------------------------------------------------
 
@@ -982,8 +993,8 @@ TerrainApp::~TerrainApp()
 	if (m_heightmapReadbackBuffer)
 		m_heightmapReadbackBuffer->Release();
 
-	if (m_normalmapReadbackBuffer)
-		m_normalmapReadbackBuffer->Release();
+	if (m_VTpagesRequestReadBackBuffer)
+		m_VTpagesRequestReadBackBuffer->Release();
 
 	if (m_computePipelineState)
 		m_computePipelineState->Release();
@@ -1079,6 +1090,7 @@ void TerrainApp::Run()
 		m_commandList->DrawIndexedInstanced(m_indexCount, 1, 0, 0, 0);
 
 		CD3DX12_RESOURCE_BARRIER rtToSrvTransition = CD3DX12_RESOURCE_BARRIER::Transition(m_renderTexture.resource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+		m_commandList->ResourceBarrier(1, &rtToSrvTransition);
 
 		// Render to backbuffer
 
@@ -1133,6 +1145,44 @@ void TerrainApp::Run()
 		UINT descriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
 		ImGui::Begin("Render To Texture");
+
+		if (ImGui::Button("Readback VT Page Requests")) 
+		{
+			CD3DX12_RESOURCE_BARRIER srvToCopyBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
+				m_renderTexture.resource,
+				D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+				D3D12_RESOURCE_STATE_COPY_SOURCE);
+			m_commandList->ResourceBarrier(1, &srvToCopyBarrier);
+
+			D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint;
+			UINT64 RTreadbackBufferSize;
+			m_renderTexture.GetFootprint(m_device, footprint, RTreadbackBufferSize);
+
+			D3D12_TEXTURE_COPY_LOCATION rtSrcLocation = {};
+			rtSrcLocation.pResource = m_renderTexture.resource;
+			rtSrcLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+			rtSrcLocation.SubresourceIndex = 0;
+
+			D3D12_TEXTURE_COPY_LOCATION rtDstLocation = {};
+			rtDstLocation.pResource = m_VTpagesRequestReadBackBuffer;
+			rtDstLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+			rtDstLocation.PlacedFootprint.Offset = 0;
+			rtDstLocation.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+			rtDstLocation.PlacedFootprint.Footprint.Width = m_width;
+			rtDstLocation.PlacedFootprint.Footprint.Height = m_height;
+			rtDstLocation.PlacedFootprint.Footprint.Depth = 1;
+			rtDstLocation.PlacedFootprint.Footprint.RowPitch = footprint.Footprint.RowPitch;
+
+			m_commandList->CopyTextureRegion(&rtDstLocation, 0, 0, 0, &rtSrcLocation, nullptr);
+
+			CD3DX12_RESOURCE_BARRIER copyToSrvBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
+				m_renderTexture.resource,
+				D3D12_RESOURCE_STATE_COPY_SOURCE,
+				D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+			m_commandList->ResourceBarrier(1, &copyToSrvBarrier);
+
+			m_checkVTpagesRequestAfterFrame = true;
+		}
 
 		CD3DX12_GPU_DESCRIPTOR_HANDLE rtSrvGpuHandle(
 			m_mainDescriptorHeap[m_frameIndex]->GetGPUDescriptorHandleForHeapStart(),
@@ -1281,6 +1331,17 @@ void TerrainApp::Run()
 			SaveHeightmapToPNG("../../../../Terrain/Assets/HeightMap.png");
 			m_saveHeightmapAfterFrame = false;
 		}
+
+		if (m_checkVTpagesRequestAfterFrame)
+		{
+			if (m_fences[m_frameIndex]->GetCompletedValue() < m_fenceValues[m_frameIndex])
+			{
+				m_fences[m_frameIndex]->SetEventOnCompletion(m_fenceValues[m_frameIndex], m_fenceEvent);
+				WaitForSingleObject(m_fenceEvent, INFINITE);
+			}
+			BuildVTPageRequestResult();
+			m_checkVTpagesRequestAfterFrame = false;
+		}
 	}
 }
 
@@ -1417,6 +1478,31 @@ void TerrainApp::OnWindowResize(int width, int height)
 
 		m_renderTexture.CreateSRV(m_device, renderTextureSrvHandle);
 	}
+
+	if (m_VTpagesRequestReadBackBuffer)
+		m_VTpagesRequestReadBackBuffer->Release();
+
+	D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint;
+	UINT64 RTreadbackBufferSize;
+	m_renderTexture.GetFootprint(m_device, footprint, RTreadbackBufferSize);
+
+	CD3DX12_RESOURCE_DESC RTreadbackBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(RTreadbackBufferSize);
+	CD3DX12_HEAP_PROPERTIES readbackHeapProps(D3D12_HEAP_TYPE_READBACK);
+
+	hr = m_device->CreateCommittedResource(
+		&readbackHeapProps,
+		D3D12_HEAP_FLAG_NONE,
+		&RTreadbackBufferDesc,
+		D3D12_RESOURCE_STATE_COPY_DEST,
+		nullptr,
+		IID_PPV_ARGS(&m_VTpagesRequestReadBackBuffer));
+
+	if (FAILED(hr))
+	{
+		return;
+	}
+
+	m_VTpagesRequestReadBackBuffer->SetName(L"VT Page Request Readback Buffer");
 
 	// ------------------------------------------------ Resize VP & Update Camera ------------------------------------------------
 
@@ -1592,4 +1678,67 @@ void TerrainApp::SaveHeightmapToPNG(const std::string& filepath)
 	{
 		std::cout << "Failed to write heightmap to " << filepath << std::endl;
 	}
+}
+
+void TerrainApp::BuildVTPageRequestResult()
+{
+	D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint;
+	UINT64 RTreadbackBufferSize;
+	m_renderTexture.GetFootprint(m_device, footprint, RTreadbackBufferSize);
+
+	void* pData = nullptr;
+	D3D12_RANGE readRange = { 0, RTreadbackBufferSize };
+	HRESULT hr = m_VTpagesRequestReadBackBuffer->Map(0, &readRange, &pData);
+
+	if (FAILED(hr))
+	{
+		std::cout << "Failed to map readback buffer for VT pages request" << std::endl;
+		return;
+	}
+
+	int i = 0;
+
+	uint8_t* pByteData = static_cast<uint8_t*>(pData);
+
+	UINT width = footprint.Footprint.Width;
+	UINT height = footprint.Footprint.Height;
+	UINT rowPitch = footprint.Footprint.RowPitch;
+
+	for (UINT y = 0; y < height; ++y)
+	{
+		uint8_t* pRow = pByteData + (y * rowPitch);
+
+		for (UINT x = 0; x < width; ++x)
+		{
+			uint8_t* pPixel = pRow + (x * 4);
+
+			uint8_t r = pPixel[0];
+			uint8_t g = pPixel[1];
+			uint8_t b = pPixel[2];
+			uint8_t a = pPixel[3];
+
+			if (i < 6000) 
+			{
+				std::cout << "VT Page Request : "
+					<< "R: " << static_cast<int>(r) << " "
+					<< "G: " << static_cast<int>(g) << " "
+					<< "B: " << static_cast<int>(b) << " "
+					<< "A: " << static_cast<int>(a) << std::endl;
+
+				i++;
+			}
+			else 
+			{
+				break;
+			}
+		}
+
+		if (i >= 6000)
+		{
+			break;
+		}	
+	}
+
+	D3D12_RANGE writeRange = { 0, 0 };
+	m_VTpagesRequestReadBackBuffer->Unmap(0, &writeRange);
 }

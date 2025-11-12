@@ -45,6 +45,8 @@ struct Texture
 
     void Release();
 
+    void GetFootprint(ID3D12Device* device, D3D12_PLACED_SUBRESOURCE_FOOTPRINT& outFootprint, UINT64& totalBytes);
+
     ID3D12Resource* resource = nullptr;
     ID3D12Resource* uploadHeap = nullptr;
     DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM;

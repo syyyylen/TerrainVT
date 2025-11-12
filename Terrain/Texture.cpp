@@ -202,3 +202,21 @@ void Texture::Release()
         uploadHeap = nullptr;
     }
 }
+
+void Texture::GetFootprint(ID3D12Device* device, D3D12_PLACED_SUBRESOURCE_FOOTPRINT& outFootprint, UINT64& totalBytes)
+{
+    D3D12_RESOURCE_DESC textureDesc = {};
+    textureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    textureDesc.Alignment = 0;
+    textureDesc.Width = width;
+    textureDesc.Height = height;
+    textureDesc.DepthOrArraySize = 1;
+    textureDesc.MipLevels = 1;
+    textureDesc.Format = format;
+    textureDesc.SampleDesc.Count = 1;
+    textureDesc.SampleDesc.Quality = 0;
+    textureDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+    textureDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+    device->GetCopyableFootprints(&textureDesc, 0, 1, 0, &outFootprint, nullptr, nullptr, &totalBytes);
+}

@@ -5,6 +5,7 @@
 #include <iomanip>
 #include <ctime>
 #include <vector>
+#include <set>
 #include <d3d12.h>
 #include <dxgi1_4.h>
 #include <DirectXMath.h>
