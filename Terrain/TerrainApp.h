@@ -73,7 +73,7 @@ private:
 	// ------------------------ App Global Settings ------------------------
 
 	bool m_drawWireframe = false;
-	bool m_maximizeAtStart = true;
+	bool m_maximizeAtStart = false;
 	bool m_runtimeNoiseAtStart = false;
 
 	HWND m_hwnd = nullptr;
@@ -123,11 +123,12 @@ private:
 	ID3D12Resource* m_normalmapReadbackBuffer = nullptr;
 	bool m_saveHeightmapAfterFrame = false;
 
+	Texture m_renderTexture = {};
 	Texture m_albedoTexture = {};
 	Texture m_computeOutputTexture = {};
 	Texture m_bakedHeightmapTexture = {};
 
 #if ENABLE_IMGUI
-	static const int IMGUI_DESCRIPTOR_OFFSET = 20;
+	static const int IMGUI_DESCRIPTOR_OFFSET = 30;
 #endif
 };

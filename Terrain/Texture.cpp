@@ -178,6 +178,16 @@ void Texture::CreateUAV(ID3D12Device* device, D3D12_CPU_DESCRIPTOR_HANDLE cpuHan
     device->CreateUnorderedAccessView(resource, nullptr, &uavDesc, cpuHandle);
 }
 
+void Texture::CreateRTV(ID3D12Device* device, D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle)
+{
+    D3D12_RENDER_TARGET_VIEW_DESC rtvDesc = {};
+    rtvDesc.Format = format;
+    rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+    rtvDesc.Texture2D.MipSlice = 0;
+
+	device->CreateRenderTargetView(resource, &rtvDesc, cpuHandle);
+}
+
 void Texture::Release()
 {
     if (resource)

@@ -39,6 +39,10 @@ struct Texture
         ID3D12Device* device,
         D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle);
 
+    void CreateRTV(
+        ID3D12Device* device,
+		D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle);
+
     void Release();
 
     ID3D12Resource* resource = nullptr;

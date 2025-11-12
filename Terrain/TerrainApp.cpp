@@ -209,7 +209,7 @@ TerrainApp::TerrainApp()
 	// ------------------------------------------------ D3D12 Init (CBV SRV DSV Descriptor Heaps) ------------------------------------------------
 
 	D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
-	rtvHeapDesc.NumDescriptors = FRAMES_IN_FLIGHT;
+	rtvHeapDesc.NumDescriptors = FRAMES_IN_FLIGHT + 1; // 1 for each backbuffer, and 1 to render to texture
 	rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
 	rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
 
@@ -787,6 +787,34 @@ TerrainApp::TerrainApp()
 		D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
 		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
+	// ------------------------------------------------ Render To Texture Init ------------------------------------------------
+
+	m_renderTexture.CreateEmpty(
+		m_device,
+		width,
+		height,
+		DXGI_FORMAT_R8G8B8A8_UNORM,
+		D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET,
+		D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+	m_renderTexture.CreateRTV(m_device, rtvHandle /* after frames in flight */);
+
+	for (int i = 0; i < FRAMES_IN_FLIGHT; ++i)
+	{
+		CD3DX12_CPU_DESCRIPTOR_HANDLE renderTextureSrvHandle(
+			m_mainDescriptorHeap[i]->GetCPUDescriptorHandleForHeapStart(),
+			6, // Render To Texture SRV (ImGui use only atm)
+			descriptorSize);
+
+		m_renderTexture.CreateSRV(m_device, renderTextureSrvHandle);
+	}
+
+	CD3DX12_RESOURCE_BARRIER barrier;
+	barrier = CD3DX12_RESOURCE_BARRIER::Transition(
+		m_renderTexture.resource,
+		D3D12_RESOURCE_STATE_RENDER_TARGET,
+		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+
 	// ------------------------------------------------ D3D12 Init Execute Commands ------------------------------------------------
 
 	m_commandList->Close();
@@ -987,6 +1015,23 @@ void TerrainApp::Run()
 			return;
 		}
 
+		// Render to texture
+
+		CD3DX12_RESOURCE_BARRIER srvToRtTransition = CD3DX12_RESOURCE_BARRIER::Transition(m_renderTexture.resource, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+		m_commandList->ResourceBarrier(1, &srvToRtTransition);
+
+		CD3DX12_CPU_DESCRIPTOR_HANDLE rtHandle(m_rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), FRAMES_IN_FLIGHT, m_rtvDescriptorSize);
+
+		m_commandList->OMSetRenderTargets(1, &rtHandle, false, nullptr);
+
+		const float rtClearColor[] = { 1.0f, 1.0f, 0.0f, 1.0f };
+		m_commandList->ClearRenderTargetView(rtHandle, rtClearColor, 0, nullptr);
+
+		CD3DX12_RESOURCE_BARRIER rtToSrvTransition = CD3DX12_RESOURCE_BARRIER::Transition(m_renderTexture.resource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+
+		// Render to backbuffer
+
 		CD3DX12_RESOURCE_BARRIER presentToRtTransition = CD3DX12_RESOURCE_BARRIER::Transition(m_renderTargets[m_frameIndex], D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
 		m_commandList->ResourceBarrier(1, &presentToRtTransition);
@@ -1035,6 +1080,19 @@ void TerrainApp::Run()
 		ImGui::Checkbox("Runtime Perlin Noise", &m_constantBuffer.runtime_noise);
 		ImGui::End();
 
+		UINT descriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+		ImGui::Begin("Render To Texture");
+
+		CD3DX12_GPU_DESCRIPTOR_HANDLE rtSrvGpuHandle(
+			m_mainDescriptorHeap[m_frameIndex]->GetGPUDescriptorHandleForHeapStart(),
+			6, // Render Texture SRV
+			descriptorSize);
+
+		ImGui::Image((ImTextureID)rtSrvGpuHandle.ptr, ImVec2(540, 540));
+
+		ImGui::End();
+
 		if (m_constantBuffer.runtime_noise) 
 		{
 			ImGui::Begin("Perlin Noise Settings");
@@ -1046,8 +1104,6 @@ void TerrainApp::Run()
 			ImGui::End();
 
 			ImGui::Begin("Heightmap Baking");
-
-			UINT descriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
 			if (ImGui::Button("Bake Heightmap"))
 			{
@@ -1285,6 +1341,32 @@ void TerrainApp::OnWindowResize(int width, int height)
 	depthStencilDesc.Flags = D3D12_DSV_FLAG_NONE;
 
 	m_device->CreateDepthStencilView(m_depthStencilBuffer, &depthStencilDesc, m_dsDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+
+	// ------------------------------------------------ Render To Texture Init ------------------------------------------------
+
+	m_renderTexture.Release();
+
+	UINT descriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+	m_renderTexture.CreateEmpty(
+		m_device,
+		width,
+		height,
+		DXGI_FORMAT_R8G8B8A8_UNORM,
+		D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET,
+		D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+	m_renderTexture.CreateRTV(m_device, rtvHandle /* after frames in flight */);
+
+	for (int i = 0; i < FRAMES_IN_FLIGHT; ++i)
+	{
+		CD3DX12_CPU_DESCRIPTOR_HANDLE renderTextureSrvHandle(
+			m_mainDescriptorHeap[i]->GetCPUDescriptorHandleForHeapStart(),
+			6, // Render To Texture SRV (t2)
+			descriptorSize);
+
+		m_renderTexture.CreateSRV(m_device, renderTextureSrvHandle);
+	}
 
 	// ------------------------------------------------ Resize VP & Update Camera ------------------------------------------------
 
