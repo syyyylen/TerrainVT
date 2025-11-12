@@ -49,7 +49,7 @@ private:
 
 	struct VTPageRequestResult 
 	{
-		std::set<DirectX::XMFLOAT2> requestedPages;
+		std::set<std::pair<int, int>> requestedPages;
 	};
 
 	// ------------------------ Input Handling ------------------------

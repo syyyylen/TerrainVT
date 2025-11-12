@@ -1069,7 +1069,7 @@ void TerrainApp::Run()
 
 		m_commandList->OMSetRenderTargets(1, &rtHandle, false, &dsvHandle);
 
-		const float rtClearColor[] = { 0.f, 0.0f, 0.0f, 1.0f };
+		const float rtClearColor[] = { 0.f, 0.0f, 0.0f, 0.0f /* 0 indicates no page requested here */};
 		m_commandList->ClearRenderTargetView(rtHandle, rtClearColor, 0, nullptr);
 		m_commandList->ClearDepthStencilView(m_dsDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
@@ -1102,7 +1102,7 @@ void TerrainApp::Run()
 
 		m_commandList->OMSetRenderTargets(1, &rtvHandle, false, &dsvHandle);
 
-		const float clearColor[] = { 0.0f, 0.0f, 0.1f, 1.0f };
+		const float clearColor[] = { 0.0f, 0.0f, 0.1f, 0.0f };
 		m_commandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
 		m_commandList->ClearDepthStencilView(m_dsDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
@@ -1704,6 +1704,11 @@ void TerrainApp::BuildVTPageRequestResult()
 	UINT height = footprint.Footprint.Height;
 	UINT rowPitch = footprint.Footprint.RowPitch;
 
+	m_VTpagesRequestResult.requestedPages.clear();
+
+	const int textureSize = 16; // 16x16px tex
+	const int pageSize = 4; // 4x4px pages
+
 	for (UINT y = 0; y < height; ++y)
 	{
 		uint8_t* pRow = pByteData + (y * rowPitch);
@@ -1717,28 +1722,28 @@ void TerrainApp::BuildVTPageRequestResult()
 			uint8_t b = pPixel[2];
 			uint8_t a = pPixel[3];
 
-			if (i < 6000) 
+			if (a > 0) // Alpha channel : something was rendered here and needs a texture page
 			{
-				std::cout << "VT Page Request : "
-					<< "R: " << static_cast<int>(r) << " "
-					<< "G: " << static_cast<int>(g) << " "
-					<< "B: " << static_cast<int>(b) << " "
-					<< "A: " << static_cast<int>(a) << std::endl;
+				int coordX = floor(((float)r / 255.0f) * 16);
+				int coordY = floor(((float)g / 255.0f) * 16);
 
-				i++;
+				m_VTpagesRequestResult.requestedPages.insert({ coordX, coordY });
 			}
-			else 
-			{
-				break;
-			}
+
+			/*std::cout << "VT Page Request : "
+				<< "R: " << static_cast<int>(r) << " "
+				<< "G: " << static_cast<int>(g) << " "
+				<< "B: " << static_cast<int>(b) << " "
+				<< "A: " << static_cast<int>(a) << std::endl;*/
 		}
-
-		if (i >= 6000)
-		{
-			break;
-		}	
 	}
 
 	D3D12_RANGE writeRange = { 0, 0 };
 	m_VTpagesRequestReadBackBuffer->Unmap(0, &writeRange);
+
+	for (const auto& coord : m_VTpagesRequestResult.requestedPages) {
+		std::cout << "Requested Page Coords : (" << coord.first << ", " << coord.second << ")" << std::endl;
+	}
+
+	std::cout << "------------------------------------" << std::endl;
 }
