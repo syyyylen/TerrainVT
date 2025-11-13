@@ -51,6 +51,7 @@ private:
 	struct VTPageRequestResult 
 	{
 		std::set<std::pair<int, int>> requestedPages;
+		ID3D12Resource* uploadHeaps[100]; // TODO this is bad, just for debugging if it works
 	};
 
 	// ------------------------ Input Handling ------------------------

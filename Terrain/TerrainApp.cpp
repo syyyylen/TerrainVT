@@ -1222,12 +1222,109 @@ void TerrainApp::Run()
 
 		ImGui::Begin("VT Main Memory Texture");
 
-		if (ImGui::Button("Load VT Page In VRAM"))
+		if (ImGui::Button("Load VT Pages In VRAM"))
 		{
-			for (const auto& coord : m_VTpagesRequestResult.requestedPages) 
+			for (int i = 0; i < 100; i++) // TODO remove this please
 			{
-				// TODO Load tiles in VT main memory texture
-				// Needs a texture format which supports random access
+				if (m_VTpagesRequestResult.uploadHeaps[i])
+					m_VTpagesRequestResult.uploadHeaps[i]->Release();
+			}
+
+			VTexHeader vTexHeader;
+			if (VTex::LoadHeader("Assets/TestVT.vtex", vTexHeader)) 
+			{
+
+				CD3DX12_RESOURCE_BARRIER srvToCopyBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
+					m_VTMainMemoryTexture.resource,
+					D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+					D3D12_RESOURCE_STATE_COPY_DEST);
+				m_commandList->ResourceBarrier(1, &srvToCopyBarrier);
+
+				int i = 0;
+				for (auto it = m_VTpagesRequestResult.requestedPages.begin(); it != m_VTpagesRequestResult.requestedPages.end(); ++it, ++i) 
+				{
+					auto coords = *it;
+
+					std::vector<char> texTileData;
+					if (VTex::LoadTile("Assets/TestVT.vtex", coords.first, coords.second, texTileData))
+					{
+						D3D12_RESOURCE_DESC textureDesc = {};
+						textureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+						textureDesc.Alignment = 0;
+						textureDesc.Width = vTexHeader.tileSize;
+						textureDesc.Height = vTexHeader.tileSize;
+						textureDesc.DepthOrArraySize = 1;
+						textureDesc.MipLevels = 1;
+						textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+						textureDesc.SampleDesc.Count = 1;
+						textureDesc.SampleDesc.Quality = 0;
+						textureDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+						textureDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+						UINT64 uploadBufferSize;
+						m_device->GetCopyableFootprints(&textureDesc, 0, 1, 0, nullptr, nullptr, nullptr, &uploadBufferSize);
+
+						CD3DX12_HEAP_PROPERTIES heapPropUpload(D3D12_HEAP_TYPE_UPLOAD);
+						CD3DX12_RESOURCE_DESC uploadBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(uploadBufferSize);
+
+						ID3D12Resource* uploadHeap;
+
+						hr = m_device->CreateCommittedResource(
+							&heapPropUpload,
+							D3D12_HEAP_FLAG_NONE,
+							&uploadBufferDesc,
+							D3D12_RESOURCE_STATE_GENERIC_READ,
+							nullptr,
+							IID_PPV_ARGS(&m_VTpagesRequestResult.uploadHeaps[i]));
+
+						D3D12_SUBRESOURCE_FOOTPRINT footprint = {};
+						footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+						footprint.Width = vTexHeader.tileSize;
+						footprint.Height = vTexHeader.tileSize;
+						footprint.Depth = 1;
+						footprint.RowPitch = (vTexHeader.tileSize * 4 + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1)
+							& ~(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1);
+
+						UINT tileX = coords.first * vTexHeader.tileSize;
+						UINT tileY = coords.second * vTexHeader.tileSize;
+
+						UINT8* mappedData = nullptr;
+						CD3DX12_RANGE readRange(0, 0);
+						m_VTpagesRequestResult.uploadHeaps[i]->Map(0, &readRange, reinterpret_cast<void**>(&mappedData));
+
+						const UINT srcRowPitch = vTexHeader.tileSize * 4;
+						const UINT8* srcData = reinterpret_cast<const UINT8*>(texTileData.data());
+						for (UINT row = 0; row < vTexHeader.tileSize; ++row)
+						{
+							memcpy(
+								mappedData + footprint.RowPitch * row,
+								srcData + srcRowPitch * row,
+								srcRowPitch);
+						}
+
+						m_VTpagesRequestResult.uploadHeaps[i]->Unmap(0, nullptr);
+
+						D3D12_TEXTURE_COPY_LOCATION srcLocation = {};
+						srcLocation.pResource = m_VTpagesRequestResult.uploadHeaps[i];
+						srcLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+						srcLocation.PlacedFootprint.Footprint = footprint;
+
+						D3D12_TEXTURE_COPY_LOCATION dstLocation = {};
+						dstLocation.pResource = m_VTMainMemoryTexture.resource;
+						dstLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+						dstLocation.SubresourceIndex = 0;
+
+						CD3DX12_BOX srcBox(0, 0, 0, vTexHeader.tileSize, vTexHeader.tileSize, 1);
+
+						m_commandList->CopyTextureRegion(&dstLocation, tileX, tileY, 0, &srcLocation, &srcBox);
+					}
+				}
+
+				CD3DX12_RESOURCE_BARRIER copyToSrvBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
+					m_VTMainMemoryTexture.resource,
+					D3D12_RESOURCE_STATE_COPY_DEST,
+					D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+				m_commandList->ResourceBarrier(1, &copyToSrvBarrier);
 			}
 		}
 
@@ -1246,9 +1343,6 @@ void TerrainApp::Run()
 		{
 			VTex::ConvertToVTex("Assets/TestVT.png", 4 /* 4x4 tiles for testing */);
 			VTex::ConvertToVTex("../../../../Terrain/Assets/TestVT.png", 4 /* 4x4 tiles for testing */);
-
-			VTex::ConvertToVTex("Assets/EarthMap.jpg", 256);
-			VTex::ConvertToVTex("../../../../Terrain/Assets/EarthMap.jpg", 256);
 		}
 
 		if (ImGui::Button("Test read VTex"))
@@ -1257,11 +1351,6 @@ void TerrainApp::Run()
 			VTex::LoadHeader("Assets/TestVT.vtex", vTexHeader);
 
 			std::cout << "Loaded VTex : " << vTexHeader.height << " height, " << vTexHeader.width << " width, " << vTexHeader.bytesPerPixel << " bytes per pixel" << std::endl;
-
-			VTexHeader vTexHeader2;
-			VTex::LoadHeader("Assets/EarthMap.vtex", vTexHeader2);
-
-			std::cout << "Loaded VTex : " << vTexHeader2.height << " height, " << vTexHeader2.width << " width, " << vTexHeader2.bytesPerPixel << " bytes per pixel" << std::endl;
 		}
 
 		ImGui::End();
