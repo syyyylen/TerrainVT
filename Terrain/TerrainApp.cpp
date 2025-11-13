@@ -1245,6 +1245,23 @@ void TerrainApp::Run()
 		if (ImGui::Button("Convert TestVT to VTex"))
 		{
 			VTex::ConvertToVTex("Assets/TestVT.png", 4 /* 4x4 tiles for testing */);
+			VTex::ConvertToVTex("../../../../Terrain/Assets/TestVT.png", 4 /* 4x4 tiles for testing */);
+
+			VTex::ConvertToVTex("Assets/EarthMap.jpg", 256);
+			VTex::ConvertToVTex("../../../../Terrain/Assets/EarthMap.jpg", 256);
+		}
+
+		if (ImGui::Button("Test read VTex"))
+		{
+			VTexHeader vTexHeader;
+			VTex::LoadHeader("Assets/TestVT.vtex", vTexHeader);
+
+			std::cout << "Loaded VTex : " << vTexHeader.height << " height, " << vTexHeader.width << " width, " << vTexHeader.bytesPerPixel << " bytes per pixel" << std::endl;
+
+			VTexHeader vTexHeader2;
+			VTex::LoadHeader("Assets/EarthMap.vtex", vTexHeader2);
+
+			std::cout << "Loaded VTex : " << vTexHeader2.height << " height, " << vTexHeader2.width << " width, " << vTexHeader2.bytesPerPixel << " bytes per pixel" << std::endl;
 		}
 
 		ImGui::End();
