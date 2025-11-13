@@ -3,6 +3,7 @@
 #include "Camera.h"
 #include "Texture.h"
 #include "ShaderCompiler.h"
+#include "VTex.h"
 
 #define FRAMES_IN_FLIGHT 3
 

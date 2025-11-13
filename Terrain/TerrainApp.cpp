@@ -1240,6 +1240,15 @@ void TerrainApp::Run()
 
 		ImGui::End();
 
+		ImGui::Begin("VTex Converter");
+
+		if (ImGui::Button("Convert TestVT to VTex"))
+		{
+			VTex::ConvertToVTex("Assets/TestVT.png", 4 /* 4x4 tiles for testing */);
+		}
+
+		ImGui::End();
+
 		if (m_constantBuffer.runtime_noise) 
 		{
 			ImGui::Begin("Perlin Noise Settings");
