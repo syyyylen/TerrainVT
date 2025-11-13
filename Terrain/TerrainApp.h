@@ -48,10 +48,21 @@ private:
 		DirectX::XMFLOAT2 uv;
 	};
 
+	struct VTPage 
+	{
+		std::pair<int, int> coords; // coords in the source texture VTex
+
+		bool operator<(const VTPage& other) const 
+		{
+			return coords < other.coords;
+		}
+	};
+
 	struct VTPageRequestResult 
 	{
 		std::set<std::pair<int, int>> requestedPages;
 		ID3D12Resource* uploadHeaps[100]; // TODO this is bad, just for debugging if it works
+		std::set<VTPage> loadedPages;
 	};
 
 	// ------------------------ Input Handling ------------------------

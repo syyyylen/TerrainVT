@@ -192,8 +192,8 @@ bool VTex::LoadTile(const std::string& vtexPath, int tileX, int tileY, std::vect
 
 	inFile.close();
 
-	std::cout << "Successfully loaded tile (" << tileX << ", " << tileY << ") from " << vtexPath
-		<< " (" << tileEntry.compressedSize << " bytes)" << std::endl;
+	/*std::cout << "Successfully loaded tile (" << tileX << ", " << tileY << ") from " << vtexPath
+		<< " (" << tileEntry.compressedSize << " bytes)" << std::endl;*/
 
 	return true;
 }

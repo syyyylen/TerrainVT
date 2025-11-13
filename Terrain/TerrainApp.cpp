@@ -1245,6 +1245,20 @@ void TerrainApp::Run()
 				{
 					auto coords = *it;
 
+					bool alreadyLoadedPage = false;
+					for (const auto& loadedPage : m_VTpagesRequestResult.loadedPages) 
+					{
+						if (loadedPage.coords == coords) // page already loaded with same coords
+						{
+							std::cout << "VT Page request but page is already loaded : " << coords.first << ", " << coords.second << ")" << std::endl;
+							alreadyLoadedPage = true;
+							break;
+						}
+					}
+
+					if (alreadyLoadedPage)
+						continue;
+
 					std::vector<char> texTileData;
 					if (VTex::LoadTile("Assets/TestVT.vtex", coords.first, coords.second, texTileData))
 					{
@@ -1285,8 +1299,14 @@ void TerrainApp::Run()
 						footprint.RowPitch = (vTexHeader.tileSize * 4 + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1)
 							& ~(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1);
 
-						UINT tileX = coords.first * vTexHeader.tileSize;
-						UINT tileY = coords.second * vTexHeader.tileSize;
+						UINT numLoadedTiles = static_cast<UINT>(m_VTpagesRequestResult.loadedPages.size());
+						UINT tilesPerRow = m_VTMainMemoryTexture.width / vTexHeader.tileSize;
+
+						UINT tileIndexX = numLoadedTiles % tilesPerRow;
+						UINT tileIndexY = numLoadedTiles / tilesPerRow;
+
+						UINT tileX = tileIndexX * vTexHeader.tileSize;
+						UINT tileY = tileIndexY * vTexHeader.tileSize;
 
 						UINT8* mappedData = nullptr;
 						CD3DX12_RANGE readRange(0, 0);
@@ -1317,6 +1337,10 @@ void TerrainApp::Run()
 						CD3DX12_BOX srcBox(0, 0, 0, vTexHeader.tileSize, vTexHeader.tileSize, 1);
 
 						m_commandList->CopyTextureRegion(&dstLocation, tileX, tileY, 0, &srcLocation, &srcBox);
+
+						VTPage loadedVTPage;
+						loadedVTPage.coords = { coords.first, coords.second };
+						m_VTpagesRequestResult.loadedPages.insert(loadedVTPage);
 					}
 				}
 
