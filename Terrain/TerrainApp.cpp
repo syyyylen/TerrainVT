@@ -368,6 +368,8 @@ TerrainApp::TerrainApp()
 	// Descriptor 0: Constant Buffer (b0)
 	// Descriptor 1: Albedo Texture (t0)
 	// Descriptor 2: Baked Heightmap (t1)
+	// Descriptor 3: VT Main Memory Texture (t2)
+	// Descriptor 4: VT Pagetable Texture (t3)
 
 	D3D12_DESCRIPTOR_RANGE  descriptorTableRanges[2];
 
@@ -378,7 +380,7 @@ TerrainApp::TerrainApp()
 	descriptorTableRanges[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
 	descriptorTableRanges[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-	descriptorTableRanges[1].NumDescriptors = 2; // t0-t1
+	descriptorTableRanges[1].NumDescriptors = 4; // t0-t1-t2-t3
 	descriptorTableRanges[1].BaseShaderRegister = 0;
 	descriptorTableRanges[1].RegisterSpace = 0;
 	descriptorTableRanges[1].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
@@ -394,9 +396,9 @@ TerrainApp::TerrainApp()
 
 	D3D12_STATIC_SAMPLER_DESC sampler = {};
 	sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
-	sampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-	sampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-	sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	sampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+	sampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+	sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
 	sampler.MipLODBias = 0;
 	sampler.MaxAnisotropy = 0;
 	sampler.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
@@ -766,7 +768,7 @@ TerrainApp::TerrainApp()
 	{
 		CD3DX12_CPU_DESCRIPTOR_HANDLE uavHandle(
 			m_mainDescriptorHeap[i]->GetCPUDescriptorHandleForHeapStart(),
-			4, // Compute Heightmap UAV (u0)
+			9, // Compute Heightmap UAV (u0)
 			descriptorSize);
 
 		m_computeOutputTexture.CreateUAV(m_device, uavHandle);
@@ -880,14 +882,14 @@ TerrainApp::TerrainApp()
 	{
 		CD3DX12_CPU_DESCRIPTOR_HANDLE mainMemoryTextureSrvHandle(
 			m_mainDescriptorHeap[i]->GetCPUDescriptorHandleForHeapStart(),
-			7, // VT Main Memory Texture (ImGui use only atm)
+			3, // VT Main Memory Texture (t2)
 			descriptorSize);
 
 		m_VTMainMemoryTexture.CreateSRV(m_device, mainMemoryTextureSrvHandle);
 
 		CD3DX12_CPU_DESCRIPTOR_HANDLE pagetableTextureSrvHandle(
 			m_mainDescriptorHeap[i]->GetCPUDescriptorHandleForHeapStart(),
-			8, // VT Main Memory Texture (ImGui use only atm)
+			4, // VT Page Table Texture (t3)
 			descriptorSize);
 
 		m_VTPageTableTexture.CreateSRV(m_device, pagetableTextureSrvHandle);
@@ -1426,16 +1428,20 @@ void TerrainApp::Run()
 
 		CD3DX12_GPU_DESCRIPTOR_HANDLE VTSrvGpuHandle(
 			m_mainDescriptorHeap[m_frameIndex]->GetGPUDescriptorHandleForHeapStart(),
-			7, // VT Main Memory Texture SRV
+			3, // VT Main Memory Texture SRV
 			descriptorSize);
 
+		ImGui::Text("Main Memory Texture : ");
 		ImGui::Image((ImTextureID)VTSrvGpuHandle.ptr, ImVec2(320, 320));
 
 		CD3DX12_GPU_DESCRIPTOR_HANDLE VTPageTablesrvGpuHandle(
 			m_mainDescriptorHeap[m_frameIndex]->GetGPUDescriptorHandleForHeapStart(),
-			8, // VT Pagetable Texture SRV
+			4, // VT Pagetable Texture SRV
 			descriptorSize);
 
+		ImGui::Separator();
+
+		ImGui::Text("Pagetable Texture : ");
 		ImGui::Image((ImTextureID)VTPageTablesrvGpuHandle.ptr, ImVec2(320, 320));
 
 		ImGui::End();
@@ -1488,7 +1494,7 @@ void TerrainApp::Run()
 
 				CD3DX12_GPU_DESCRIPTOR_HANDLE uavGpuHandle(
 					m_mainDescriptorHeap[m_frameIndex]->GetGPUDescriptorHandleForHeapStart(),
-					4, // Compute UAV (u0)
+					9, // Compute UAV (u0)
 					descriptorSize);
 				m_commandList->SetComputeRootDescriptorTable(1, uavGpuHandle);
 
@@ -1989,8 +1995,8 @@ void TerrainApp::BuildVTPageRequestResult()
 
 			if (a > 0) // Alpha channel : something was rendered here and needs a texture page
 			{
-				int coordX = floor(((float)r / 255.0f) * 16);
-				int coordY = floor(((float)g / 255.0f) * 16);
+				int coordX = floor(((float)r / 255.0f) * 3);
+				int coordY = floor(((float)g / 255.0f) * 3);
 
 				m_VTpagesRequestResult.requestedPages.insert({ coordX, coordY });
 			}

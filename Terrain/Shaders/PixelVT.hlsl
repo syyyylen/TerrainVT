@@ -14,7 +14,5 @@ float4 main(DSOutput input) : SV_TARGET
     float2 rqPx = floor(input.uv * textureSize);
     float2 rqPage = floor(rqPx / pageSize);
     
-    return float4(rqPage / 16, 0.0f, 1.0f);
-    
-    // return float4(input.uv, 0.0f, 1.0f);
+    return float4(rqPage / 3, 0.0f, 1.0f);
 }
