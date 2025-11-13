@@ -858,7 +858,7 @@ TerrainApp::TerrainApp()
 
 	m_commandList->ResourceBarrier(1, RTbarriers);
 
-	// ------------------------------------------------ VT Main Memory Texture ------------------------------------------------
+	// ------------------------------------------------ VT Textures ------------------------------------------------
 
 	m_VTMainMemoryTexture.CreateEmpty(
 		m_device,
@@ -868,14 +868,29 @@ TerrainApp::TerrainApp()
 		D3D12_RESOURCE_FLAG_NONE,
 		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
+	m_VTPageTableTexture.CreateEmpty(
+		m_device,
+		4,
+		4,
+		DXGI_FORMAT_R8G8B8A8_UNORM,
+		D3D12_RESOURCE_FLAG_NONE,
+		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+
 	for (int i = 0; i < FRAMES_IN_FLIGHT; ++i)
 	{
-		CD3DX12_CPU_DESCRIPTOR_HANDLE renderTextureSrvHandle(
+		CD3DX12_CPU_DESCRIPTOR_HANDLE mainMemoryTextureSrvHandle(
 			m_mainDescriptorHeap[i]->GetCPUDescriptorHandleForHeapStart(),
 			7, // VT Main Memory Texture (ImGui use only atm)
 			descriptorSize);
 
-		m_VTMainMemoryTexture.CreateSRV(m_device, renderTextureSrvHandle);
+		m_VTMainMemoryTexture.CreateSRV(m_device, mainMemoryTextureSrvHandle);
+
+		CD3DX12_CPU_DESCRIPTOR_HANDLE pagetableTextureSrvHandle(
+			m_mainDescriptorHeap[i]->GetCPUDescriptorHandleForHeapStart(),
+			8, // VT Main Memory Texture (ImGui use only atm)
+			descriptorSize);
+
+		m_VTPageTableTexture.CreateSRV(m_device, pagetableTextureSrvHandle);
 	}
 
 	CD3DX12_RESOURCE_BARRIER VTtoSrvBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
@@ -1340,6 +1355,7 @@ void TerrainApp::Run()
 
 						VTPage loadedVTPage;
 						loadedVTPage.coords = { coords.first, coords.second };
+						loadedVTPage.physicalCoords = { tileX, tileY };
 						m_VTpagesRequestResult.loadedPages.insert(loadedVTPage);
 					}
 				}
@@ -1349,6 +1365,62 @@ void TerrainApp::Run()
 					D3D12_RESOURCE_STATE_COPY_DEST,
 					D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 				m_commandList->ResourceBarrier(1, &copyToSrvBarrier);
+
+				// Update pagetable : stores physical adress at virtual adresses locations
+
+				if (m_VTpagesRequestResult.pageTableUploadHeap)
+					m_VTpagesRequestResult.pageTableUploadHeap->Release();
+
+				std::vector<UINT32> pageTableData(4 * 4, 0);
+				for (const VTPage& page : m_VTpagesRequestResult.loadedPages)
+				{
+					int virtualX = page.coords.first;
+					int virtualY = page.coords.second;
+					UINT physicalX = page.physicalCoords.first;
+					UINT physicalY = page.physicalCoords.second;
+
+					int index = virtualY * 4 + virtualX; // idx in the 4x4 texture
+
+					pageTableData[index] = (physicalX & 0xFF) | ((physicalY & 0xFF) << 8) | (0xFF << 24); // Pack: R=physicalX, G=physicalY, B=0, A=255
+				}
+
+				UINT64 uploadBufferSize;
+				D3D12_PLACED_SUBRESOURCE_FOOTPRINT vtPagetableFootprint;
+				m_VTPageTableTexture.GetFootprint(m_device, vtPagetableFootprint, uploadBufferSize);
+
+				CD3DX12_HEAP_PROPERTIES heapPropUpload(D3D12_HEAP_TYPE_UPLOAD);
+				CD3DX12_RESOURCE_DESC uploadBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(uploadBufferSize);
+
+				m_device->CreateCommittedResource(
+					&heapPropUpload,
+					D3D12_HEAP_FLAG_NONE,
+					&uploadBufferDesc,
+					D3D12_RESOURCE_STATE_GENERIC_READ,
+					nullptr,
+					IID_PPV_ARGS(&m_VTpagesRequestResult.pageTableUploadHeap));
+
+				D3D12_SUBRESOURCE_DATA textureData = {};
+				textureData.pData = pageTableData.data();
+				textureData.RowPitch = 4 * 4; // 4 pixels * 4 bytes per pixel
+				textureData.SlicePitch = 4 * 4 * 4; // 4x4 texture * 4 bytes per pixel
+
+				CD3DX12_RESOURCE_BARRIER pageTableToCopyDestBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
+					m_VTPageTableTexture.resource,
+					D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+					D3D12_RESOURCE_STATE_COPY_DEST);
+				m_commandList->ResourceBarrier(1, &pageTableToCopyDestBarrier);
+
+				UpdateSubresources(m_commandList,
+					m_VTPageTableTexture.resource,
+					m_VTpagesRequestResult.pageTableUploadHeap,
+					0, 0, 1,
+					&textureData);
+
+				CD3DX12_RESOURCE_BARRIER pageTableToSrvBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
+					m_VTPageTableTexture.resource,
+					D3D12_RESOURCE_STATE_COPY_DEST,
+					D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+				m_commandList->ResourceBarrier(1, &pageTableToSrvBarrier);
 			}
 		}
 
@@ -1358,6 +1430,13 @@ void TerrainApp::Run()
 			descriptorSize);
 
 		ImGui::Image((ImTextureID)VTSrvGpuHandle.ptr, ImVec2(320, 320));
+
+		CD3DX12_GPU_DESCRIPTOR_HANDLE VTPageTablesrvGpuHandle(
+			m_mainDescriptorHeap[m_frameIndex]->GetGPUDescriptorHandleForHeapStart(),
+			8, // VT Pagetable Texture SRV
+			descriptorSize);
+
+		ImGui::Image((ImTextureID)VTPageTablesrvGpuHandle.ptr, ImVec2(320, 320));
 
 		ImGui::End();
 

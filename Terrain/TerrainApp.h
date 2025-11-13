@@ -50,7 +50,8 @@ private:
 
 	struct VTPage 
 	{
-		std::pair<int, int> coords; // coords in the source texture VTex
+		std::pair<int, int> coords; // virtual coords in the source texture VTex
+		std::pair <UINT, UINT> physicalCoords; // physical coords in the gpu texture
 
 		bool operator<(const VTPage& other) const 
 		{
@@ -63,6 +64,7 @@ private:
 		std::set<std::pair<int, int>> requestedPages;
 		ID3D12Resource* uploadHeaps[100]; // TODO this is bad, just for debugging if it works
 		std::set<VTPage> loadedPages;
+		ID3D12Resource* pageTableUploadHeap;
 	};
 
 	// ------------------------ Input Handling ------------------------
@@ -157,6 +159,7 @@ private:
 	VTPageRequestResult m_VTpagesRequestResult = {};
 	bool m_checkVTpagesRequestAfterFrame = false;
 	Texture m_VTMainMemoryTexture = {};
+	Texture m_VTPageTableTexture = {};
 
 	Texture m_renderTexture = {};
 	Texture m_albedoTexture = {};
