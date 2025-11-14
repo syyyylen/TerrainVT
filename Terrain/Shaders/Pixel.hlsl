@@ -25,12 +25,22 @@ float4 main(DSOutput input) : SV_TARGET
     float4 pagetableSample = vtPagetable.Sample(s1, rqPageUV);
     if (pagetableSample.a > 0.0f)
     {
-        float2 physicalAdress = pagetableSample.rg * 255.0f;
-        float2 pageAdress = physicalAdress / textureSize; // back to 0-1 range along texture
+        float2 pageAdress = pagetableSample.rg * 255.0f; // page physical adress
+ 
+        float2 rest = frac(rqPx / pageSize);
+        rest = rest * pageSize;
         
-        finalColor = vtTexture.Sample(s1, pageAdress + 0.1f /* we are at the corner of the page, move inside it */).rgb;
+        float2 pxAdress = pageAdress + rest; // px physical adress
+ 
+        float2 pxUVcoords = pxAdress / textureSize; // back to 0-1 range
+        
+        float4 vTexColor = vtTexture.Sample(s1, pxUVcoords);
+ 
+        if (vTexColor.a > 0.0f)
+        {
+            finalColor = vTexColor.rgb;
+        }
     }
-    
     
     return float4(finalColor, 1.0f);
     

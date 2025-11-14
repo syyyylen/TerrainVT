@@ -1248,7 +1248,7 @@ void TerrainApp::Run()
 			}
 
 			VTexHeader vTexHeader;
-			if (VTex::LoadHeader("Assets/TestVT.vtex", vTexHeader)) 
+			if (VTex::LoadHeader("Assets/TestVT2.vtex", vTexHeader)) 
 			{
 
 				CD3DX12_RESOURCE_BARRIER srvToCopyBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
@@ -1277,7 +1277,7 @@ void TerrainApp::Run()
 						continue;
 
 					std::vector<char> texTileData;
-					if (VTex::LoadTile("Assets/TestVT.vtex", coords.first, coords.second, texTileData))
+					if (VTex::LoadTile("Assets/TestVT2.vtex", coords.first, coords.second, texTileData))
 					{
 						D3D12_RESOURCE_DESC textureDesc = {};
 						textureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -1431,6 +1431,11 @@ void TerrainApp::Run()
 			3, // VT Main Memory Texture SRV
 			descriptorSize);
 
+		if (ImGui::Button("Clear Loaded Pages")) 
+		{
+			m_VTpagesRequestResult.loadedPages.clear();
+		}
+
 		ImGui::Text("Main Memory Texture : ");
 		ImGui::Image((ImTextureID)VTSrvGpuHandle.ptr, ImVec2(320, 320));
 
@@ -1450,14 +1455,14 @@ void TerrainApp::Run()
 
 		if (ImGui::Button("Convert TestVT to VTex"))
 		{
-			VTex::ConvertToVTex("Assets/TestVT.png", 4 /* 4x4 tiles for testing */);
-			VTex::ConvertToVTex("../../../../Terrain/Assets/TestVT.png", 4 /* 4x4 tiles for testing */);
+			VTex::ConvertToVTex("Assets/TestVT2.png", 4 /* 4x4 tiles for testing */);
+			VTex::ConvertToVTex("../../../../Terrain/Assets/TestVT2.png", 4 /* 4x4 tiles for testing */);
 		}
 
 		if (ImGui::Button("Test read VTex"))
 		{
 			VTexHeader vTexHeader;
-			VTex::LoadHeader("Assets/TestVT.vtex", vTexHeader);
+			VTex::LoadHeader("Assets/TestVT2.vtex", vTexHeader);
 
 			std::cout << "Loaded VTex : " << vTexHeader.height << " height, " << vTexHeader.width << " width, " << vTexHeader.bytesPerPixel << " bytes per pixel" << std::endl;
 		}
