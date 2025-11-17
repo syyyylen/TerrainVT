@@ -16,7 +16,7 @@ struct HSConstantOutput
     float inside : SV_InsideTessFactor;
 };
 
-#define TESS_FACTOR 1;
+#define TESS_FACTOR 64;
 
 HSConstantOutput HSConstant(InputPatch<VSOutput, 3> patch, uint patchID : SV_PrimitiveID)
 {

@@ -605,11 +605,9 @@ TerrainApp::TerrainApp()
 
 	// ------------------------------------------------ Terrain Base Mesh Generation ------------------------------------------------
 
-	/*const float PLANE_SIZE = 1000.0f;
-	const float QUAD_SIZE = 20.0f;*/
+	const float PLANE_SIZE = 1000.0f;
+	const float QUAD_SIZE = 20.0f;
 
-	const float PLANE_SIZE = 10.0f;
-	const float QUAD_SIZE = 2.0f;
 	const int GRID_DIVISIONS = static_cast<int>(PLANE_SIZE / QUAD_SIZE);
 
 	std::vector<Vertex> vList;
@@ -862,18 +860,28 @@ TerrainApp::TerrainApp()
 
 	// ------------------------------------------------ VT Textures ------------------------------------------------
 
+	int vtMainMemoryTextureSize;
+	int pagetableTextureSize;
+#if USE_TEST_VTEX
+	vtMainMemoryTextureSize = 16;
+	pagetableTextureSize = 16 / 4;
+#else
+	vtMainMemoryTextureSize = 4096;
+	pagetableTextureSize = 4096 / 256;
+#endif
+
 	m_VTMainMemoryTexture.CreateEmpty(
 		m_device,
-		16,
-		16,
+		vtMainMemoryTextureSize,
+		vtMainMemoryTextureSize,
 		DXGI_FORMAT_R8G8B8A8_UNORM,
 		D3D12_RESOURCE_FLAG_NONE,
 		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
 	m_VTPageTableTexture.CreateEmpty(
 		m_device,
-		4,
-		4,
+		pagetableTextureSize,
+		pagetableTextureSize,
 		DXGI_FORMAT_R8G8B8A8_UNORM,
 		D3D12_RESOURCE_FLAG_NONE,
 		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
@@ -945,6 +953,14 @@ TerrainApp::TerrainApp()
 	m_constantBuffer.noise_height = 110.0f;
 	m_constantBuffer.noise_octaves = 5;
 	m_constantBuffer.runtime_noise = m_runtimeNoiseAtStart;
+
+#if USE_TEST_VTEX
+	m_constantBuffer.vt_texture_size = 16;
+	m_constantBuffer.vt_texture_page_size = 4;
+#else
+	m_constantBuffer.vt_texture_size = 4096;
+	m_constantBuffer.vt_texture_page_size = 256;
+#endif
 
 #if ENABLE_IMGUI
 
@@ -1177,13 +1193,15 @@ void TerrainApp::Run()
 
 		ImGui::Begin("FrameRate");
 		ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-		ImGui::SliderFloat("Move Speed", &m_cameraMoveSpeed, 1.0f, 100.0f);
+		ImGui::SliderFloat("Move Speed", &m_cameraMoveSpeed, 1.0f, 400.0f);
 		ImGui::Text("Pre-tesselation Vertex Count: %d", m_vertexCount);
 		const int tessFactor = 64;
 		int baseTriangles = m_vertexCount / 3;
 		int tessVertexCount = baseTriangles * ((tessFactor + 1) * (tessFactor + 2) / 2);
 		ImGui::Text("Tessellated Vertex Count: %d", tessVertexCount);
-		ImGui::Checkbox("Runtime Perlin Noise", &m_constantBuffer.runtime_noise);
+		bool runtime_noise = m_constantBuffer.runtime_noise;
+		ImGui::Checkbox("Runtime Perlin Noise", &runtime_noise);
+		m_constantBuffer.runtime_noise = runtime_noise;
 		ImGui::End();
 
 		UINT descriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
@@ -1241,14 +1259,21 @@ void TerrainApp::Run()
 
 		if (ImGui::Button("Load VT Pages In VRAM"))
 		{
-			for (int i = 0; i < 100; i++) // TODO remove this please
+			for (int i = 0; i < 1000; i++) // TODO remove this please
 			{
 				if (m_VTpagesRequestResult.uploadHeaps[i])
 					m_VTpagesRequestResult.uploadHeaps[i]->Release();
 			}
 
+			std::string vtexPath;
+#if USE_TEST_VTEX
+			vtexPath = "Assets/TestVT2.vtex";
+#else
+			vtexPath = "Assets/rocks_albedo.vtex";
+#endif
+
 			VTexHeader vTexHeader;
-			if (VTex::LoadHeader("Assets/TestVT2.vtex", vTexHeader)) 
+			if (VTex::LoadHeader(vtexPath, vTexHeader))
 			{
 
 				CD3DX12_RESOURCE_BARRIER srvToCopyBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
@@ -1277,7 +1302,7 @@ void TerrainApp::Run()
 						continue;
 
 					std::vector<char> texTileData;
-					if (VTex::LoadTile("Assets/TestVT2.vtex", coords.first, coords.second, texTileData))
+					if (VTex::LoadTile(vtexPath, coords.first, coords.second, texTileData))
 					{
 						D3D12_RESOURCE_DESC textureDesc = {};
 						textureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -1357,7 +1382,7 @@ void TerrainApp::Run()
 
 						VTPage loadedVTPage;
 						loadedVTPage.coords = { coords.first, coords.second };
-						loadedVTPage.physicalCoords = { tileX, tileY };
+						loadedVTPage.physicalCoords = { tileIndexX, tileIndexY }; // in page space, not in px space
 						m_VTpagesRequestResult.loadedPages.insert(loadedVTPage);
 					}
 				}
@@ -1369,11 +1394,15 @@ void TerrainApp::Run()
 				m_commandList->ResourceBarrier(1, &copyToSrvBarrier);
 
 				// Update pagetable : stores physical adress at virtual adresses locations
+				// test vtex 16px 4px pages 16/4 => needs 4*4 pagetable
+				// 4096px 256px pages 4096/256 => needs 16*16 pagetable
+
+				int pagetableSize = m_constantBuffer.vt_texture_size / m_constantBuffer.vt_texture_page_size;
 
 				if (m_VTpagesRequestResult.pageTableUploadHeap)
 					m_VTpagesRequestResult.pageTableUploadHeap->Release();
 
-				std::vector<UINT32> pageTableData(4 * 4, 0);
+				std::vector<UINT32> pageTableData(pagetableSize * pagetableSize, 0);
 				for (const VTPage& page : m_VTpagesRequestResult.loadedPages)
 				{
 					int virtualX = page.coords.first;
@@ -1381,7 +1410,7 @@ void TerrainApp::Run()
 					UINT physicalX = page.physicalCoords.first;
 					UINT physicalY = page.physicalCoords.second;
 
-					int index = virtualY * 4 + virtualX; // idx in the 4x4 texture
+					int index = virtualY * pagetableSize + virtualX;
 
 					pageTableData[index] = (physicalX & 0xFF) | ((physicalY & 0xFF) << 8) | (0xFF << 24); // Pack: R=physicalX, G=physicalY, B=0, A=255
 				}
@@ -1403,8 +1432,8 @@ void TerrainApp::Run()
 
 				D3D12_SUBRESOURCE_DATA textureData = {};
 				textureData.pData = pageTableData.data();
-				textureData.RowPitch = 4 * 4; // 4 pixels * 4 bytes per pixel
-				textureData.SlicePitch = 4 * 4 * 4; // 4x4 texture * 4 bytes per pixel
+				textureData.RowPitch = pagetableSize * 4; // N pixels * 4 bytes per pixel
+				textureData.SlicePitch = pagetableSize * pagetableSize * 4; // NxN texture * 4 bytes per pixel
 
 				CD3DX12_RESOURCE_BARRIER pageTableToCopyDestBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
 					m_VTPageTableTexture.resource,
@@ -1455,14 +1484,23 @@ void TerrainApp::Run()
 
 		if (ImGui::Button("Convert TestVT to VTex"))
 		{
+#if USE_TEST_VTEX
 			VTex::ConvertToVTex("Assets/TestVT2.png", 4 /* 4x4 tiles for testing */);
 			VTex::ConvertToVTex("../../../../Terrain/Assets/TestVT2.png", 4 /* 4x4 tiles for testing */);
+#else
+			VTex::ConvertToVTex("Assets/rocks_albedo.png", 256);
+			VTex::ConvertToVTex("../../../../Terrain/Assets/rocks_albedo.png", 256);
+#endif
 		}
 
 		if (ImGui::Button("Test read VTex"))
 		{
 			VTexHeader vTexHeader;
+#if USE_TEST_VTEX
 			VTex::LoadHeader("Assets/TestVT2.vtex", vTexHeader);
+#else
+			VTex::LoadHeader("Assets/rocks_albedo.vtex", vTexHeader);
+#endif
 
 			std::cout << "Loaded VTex : " << vTexHeader.height << " height, " << vTexHeader.width << " width, " << vTexHeader.bytesPerPixel << " bytes per pixel" << std::endl;
 		}
@@ -1982,8 +2020,16 @@ void TerrainApp::BuildVTPageRequestResult()
 
 	m_VTpagesRequestResult.requestedPages.clear();
 
-	const int textureSize = 16; // 16x16px tex
-	const int pageSize = 4; // 4x4px pages
+	int textureSize;
+	int pageSize;
+
+#if USE_TEST_VTEX
+	textureSize = 16; // 16x16px tex
+	pageSize = 4; // 4x4px pages
+#else
+	textureSize = 4096;
+	pageSize = 256;
+#endif
 
 	for (UINT y = 0; y < height; ++y)
 	{
@@ -1991,7 +2037,7 @@ void TerrainApp::BuildVTPageRequestResult()
 
 		for (UINT x = 0; x < width; ++x)
 		{
-			uint8_t* pPixel = pRow + (x * 4);
+			uint8_t* pPixel = pRow + (x * pageSize);
 
 			uint8_t r = pPixel[0];
 			uint8_t g = pPixel[1];
@@ -2000,8 +2046,8 @@ void TerrainApp::BuildVTPageRequestResult()
 
 			if (a > 0) // Alpha channel : something was rendered here and needs a texture page
 			{
-				int coordX = floor(((float)r / 255.0f) * 3);
-				int coordY = floor(((float)g / 255.0f) * 3);
+				int coordX = floor(((float)r / 255.0f) * (pageSize - 1));
+				int coordY = floor(((float)g / 255.0f) * (pageSize - 1));
 
 				m_VTpagesRequestResult.requestedPages.insert({ coordX, coordY });
 			}

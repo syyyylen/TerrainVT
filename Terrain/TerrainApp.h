@@ -9,6 +9,8 @@
 
 #define ENABLE_IMGUI 1
 
+#define USE_TEST_VTEX 1
+
 class TerrainApp 
 {
 public:
@@ -37,9 +39,12 @@ private:
 		float noise_lacunarity;
 		float noise_scale;
 		float noise_height;
+		// 16 bytes
 		int noise_octaves;
-		bool runtime_noise;
-		DirectX::XMFLOAT2 padding;
+		int runtime_noise;
+		int vt_texture_size;
+		int vt_texture_page_size;
+		// 16 bytes
 	};
 
 	struct Vertex 
@@ -48,10 +53,10 @@ private:
 		DirectX::XMFLOAT2 uv;
 	};
 
-	struct VTPage 
+	struct VTPage
 	{
-		std::pair<int, int> coords; // virtual coords in the source texture VTex
-		std::pair <UINT, UINT> physicalCoords; // physical coords in the gpu texture
+		std::pair<int, int> coords; // virtual coords in the source texture VTex (in page space)
+		std::pair <UINT, UINT> physicalCoords; // physical coords in the gpu texture (in page/tile space, not pixel space)
 
 		bool operator<(const VTPage& other) const 
 		{
@@ -62,7 +67,7 @@ private:
 	struct VTPageRequestResult 
 	{
 		std::set<std::pair<int, int>> requestedPages;
-		ID3D12Resource* uploadHeaps[100]; // TODO this is bad, just for debugging if it works
+		ID3D12Resource* uploadHeaps[1000]; // TODO this is bad, just for debugging if it works
 		std::set<VTPage> loadedPages;
 		ID3D12Resource* pageTableUploadHeap;
 	};
@@ -108,7 +113,7 @@ private:
 	Camera m_camera = {};
 	float m_cameraForward = 0.0f;
 	float m_cameraRight = 0.0f;
-	float m_cameraMoveSpeed = 12.0f;
+	float m_cameraMoveSpeed = 320.0f;
 
 	// ------------------------ D3D12 ------------------------
 

@@ -28,8 +28,9 @@ cbuffer ConstantBuffer : register(b0)
     float noise_scale;
     float noise_height;
     int noise_octaves;
-    bool noise_runtime;
-    float2 padding;
+    int noise_runtime;
+    int vt_texture_size;
+    int vt_texture_page_size;
 };
 
 Texture2D heightMap : register(t1);

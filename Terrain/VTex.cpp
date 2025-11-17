@@ -7,7 +7,7 @@ void VTex::ConvertToVTex(const std::string & path, int tileSize)
 	std::cout << "Converting " << path << " to .vtex format..." << std::endl;
 
 	Image sourceImage;
-	sourceImage.LoadImageFromFile(path, false, STBI_rgb_alpha);
+	sourceImage.LoadImageFromFile(path, true, STBI_rgb_alpha);
 
 	if (!sourceImage.bytes)
 	{

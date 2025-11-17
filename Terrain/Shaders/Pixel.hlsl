@@ -11,28 +11,38 @@ Texture2D vtTexture : register(t2);
 Texture2D vtPagetable : register(t3);
 SamplerState s1 : register(s0);
 
+cbuffer ConstantBuffer : register(b0)
+{
+    row_major float4x4 viewProj;
+    float noise_persistence;
+    float noise_lacunarity;
+    float noise_scale;
+    float noise_height;
+    int noise_octaves;
+    int noise_runtime;
+    int vt_texture_size;
+    int vt_texture_page_size;
+};
+
 float4 main(DSOutput input) : SV_TARGET
 {
     float3 finalColor = float3(0.0f, 0.0f, 0.0f);
     
-    const int textureSize = 16; // 16x16px tex
-    const int pageSize = 4; // 4x4px pages
-    
-    float2 rqPx = floor(input.uv * textureSize);
-    float2 rqPage = floor(rqPx / pageSize);
-    float2 rqPageUV = rqPage / 3;
+    float2 rqPx = floor(input.uv * vt_texture_size);
+    float2 rqPage = floor(rqPx / vt_texture_page_size);
+    float2 rqPageUV = rqPage / (vt_texture_page_size - 1);
     
     float4 pagetableSample = vtPagetable.Sample(s1, rqPageUV);
     if (pagetableSample.a > 0.0f)
     {
-        float2 pageAdress = pagetableSample.rg * 255.0f; // page physical adress
+        float2 pageAdress = pagetableSample.rg * 255.0f * vt_texture_page_size; // page physical address (tile index * tile size = pixel coords)
  
-        float2 rest = frac(rqPx / pageSize);
-        rest = rest * pageSize;
+        float2 rest = frac(rqPx / vt_texture_page_size);
+        rest = rest * vt_texture_page_size;
         
         float2 pxAdress = pageAdress + rest; // px physical adress
  
-        float2 pxUVcoords = pxAdress / textureSize; // back to 0-1 range
+        float2 pxUVcoords = pxAdress / vt_texture_size; // back to 0-1 range
         
         float4 vTexColor = vtTexture.Sample(s1, pxUVcoords);
  

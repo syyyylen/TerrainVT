@@ -6,13 +6,23 @@ struct DSOutput
     float3 worldPos : TEXCOORD1;
 };
 
+cbuffer ConstantBuffer : register(b0)
+{
+    row_major float4x4 viewProj;
+    float noise_persistence;
+    float noise_lacunarity;
+    float noise_scale;
+    float noise_height;
+    int noise_octaves;
+    int noise_runtime;
+    int vt_texture_size;
+    int vt_texture_page_size;
+};
+
 float4 main(DSOutput input) : SV_TARGET
 {
-    const int textureSize = 16; // 16x16px tex
-    const int pageSize = 4; // 4x4px pages
+    float2 rqPx = floor(input.uv * vt_texture_size);
+    float2 rqPage = floor(rqPx / vt_texture_page_size);
     
-    float2 rqPx = floor(input.uv * textureSize);
-    float2 rqPage = floor(rqPx / pageSize);
-    
-    return float4(rqPage / 3, 0.0f, 1.0f);
+    return float4(rqPage / (vt_texture_page_size - 1), 0.0f, 1.0f);
 }

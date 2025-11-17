@@ -8,7 +8,9 @@ cbuffer ConstantBuffer : register(b0)
     float noise_scale;
     float noise_height;
     int noise_octaves;
-    float3 padding;
+    int runtime_noise;
+    int vt_texture_size;
+    int vt_texture_page_size;
 };
 
 RWTexture2D<float> OutHeightMap : register(u0);
