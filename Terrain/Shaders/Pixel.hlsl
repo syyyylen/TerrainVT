@@ -30,7 +30,8 @@ float4 main(DSOutput input) : SV_TARGET
     
     float2 rqPx = floor(input.uv * vt_texture_size);
     float2 rqPage = floor(rqPx / vt_texture_page_size);
-    float2 rqPageUV = rqPage / (vt_texture_page_size - 1);
+    float pagetableSize = vt_texture_size / vt_texture_page_size;
+    float2 rqPageUV = rqPage / (pagetableSize - 1);
     
     float4 pagetableSample = vtPagetable.Sample(s1, rqPageUV);
     if (pagetableSample.a > 0.0f)

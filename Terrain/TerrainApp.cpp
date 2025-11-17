@@ -2020,15 +2020,11 @@ void TerrainApp::BuildVTPageRequestResult()
 
 	m_VTpagesRequestResult.requestedPages.clear();
 
-	int textureSize;
-	int pageSize;
-
+	int pagetableTextureSize;
 #if USE_TEST_VTEX
-	textureSize = 16; // 16x16px tex
-	pageSize = 4; // 4x4px pages
+	pagetableTextureSize = 16 / 4;
 #else
-	textureSize = 4096;
-	pageSize = 256;
+	pagetableTextureSize = 4096 / 256;
 #endif
 
 	for (UINT y = 0; y < height; ++y)
@@ -2037,7 +2033,7 @@ void TerrainApp::BuildVTPageRequestResult()
 
 		for (UINT x = 0; x < width; ++x)
 		{
-			uint8_t* pPixel = pRow + (x * pageSize);
+			uint8_t* pPixel = pRow + (x * pagetableTextureSize);
 
 			uint8_t r = pPixel[0];
 			uint8_t g = pPixel[1];
@@ -2046,8 +2042,8 @@ void TerrainApp::BuildVTPageRequestResult()
 
 			if (a > 0) // Alpha channel : something was rendered here and needs a texture page
 			{
-				int coordX = floor(((float)r / 255.0f) * (pageSize - 1));
-				int coordY = floor(((float)g / 255.0f) * (pageSize - 1));
+				int coordX = floor(((float)r / 255.0f) * (pagetableTextureSize - 1));
+				int coordY = floor(((float)g / 255.0f) * (pagetableTextureSize - 1));
 
 				m_VTpagesRequestResult.requestedPages.insert({ coordX, coordY });
 			}

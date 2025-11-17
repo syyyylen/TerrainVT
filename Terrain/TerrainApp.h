@@ -9,7 +9,7 @@
 
 #define ENABLE_IMGUI 1
 
-#define USE_TEST_VTEX 1
+#define USE_TEST_VTEX 0
 
 class TerrainApp 
 {

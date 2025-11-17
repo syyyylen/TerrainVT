@@ -23,6 +23,7 @@ float4 main(DSOutput input) : SV_TARGET
 {
     float2 rqPx = floor(input.uv * vt_texture_size);
     float2 rqPage = floor(rqPx / vt_texture_page_size);
-    
-    return float4(rqPage / (vt_texture_page_size - 1), 0.0f, 1.0f);
+    float pagetableSize = vt_texture_size / vt_texture_page_size;
+
+    return float4(rqPage / (pagetableSize - 1), 0.0f, 1.0f);
 }
