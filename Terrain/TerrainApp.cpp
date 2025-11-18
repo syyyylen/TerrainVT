@@ -1069,8 +1069,6 @@ TerrainApp::~TerrainApp()
 
 void TerrainApp::Run()
 {
-	ReadbackPageRequestWorker readbackPagesReqWorker([&] { BuildVTPageRequestResult(); });
-
 	while (m_isRunning)
 	{
 		// ------------------------------------------------ App Update ------------------------------------------------
@@ -1189,73 +1187,8 @@ void TerrainApp::Run()
 		m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
 		m_commandList->DrawIndexedInstanced(m_indexCount, 1, 0, 0, 0);
 
-		// TODO async page request WIP
-		OPTICK_EVENT("Readback VT Page Requests");
-
-		CD3DX12_RESOURCE_BARRIER srvToCopyBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
-			m_renderTexture.resource,
-			D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
-			D3D12_RESOURCE_STATE_COPY_SOURCE);
-		m_commandList->ResourceBarrier(1, &srvToCopyBarrier);
-
-		D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint;
-		UINT64 RTreadbackBufferSize;
-		m_renderTexture.GetFootprint(m_device, footprint, RTreadbackBufferSize);
-
-		D3D12_TEXTURE_COPY_LOCATION rtSrcLocation = {};
-		rtSrcLocation.pResource = m_renderTexture.resource;
-		rtSrcLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-		rtSrcLocation.SubresourceIndex = 0;
-
-		D3D12_TEXTURE_COPY_LOCATION rtDstLocation = {};
-		rtDstLocation.pResource = m_VTpagesRequestReadBackBuffer;
-		rtDstLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-		rtDstLocation.PlacedFootprint.Offset = 0;
-		rtDstLocation.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-		rtDstLocation.PlacedFootprint.Footprint.Width = m_width;
-		rtDstLocation.PlacedFootprint.Footprint.Height = m_height;
-		rtDstLocation.PlacedFootprint.Footprint.Depth = 1;
-		rtDstLocation.PlacedFootprint.Footprint.RowPitch = footprint.Footprint.RowPitch;
-
-		m_commandList->CopyTextureRegion(&rtDstLocation, 0, 0, 0, &rtSrcLocation, nullptr);
-
-		CD3DX12_RESOURCE_BARRIER copyToSrvBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
-			m_renderTexture.resource,
-			D3D12_RESOURCE_STATE_COPY_SOURCE,
-			D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-		m_commandList->ResourceBarrier(1, &copyToSrvBarrier);
-
-		m_checkVTpagesRequestAfterFrame = true;
-
-#if ENABLE_IMGUI
-
-		m_commandList->OMSetRenderTargets(1, &rtvHandle, false, nullptr);
-
-		// ------------------------------------------------ ImGui Commands ------------------------------------------------
-
-		ImGui_ImplDX12_NewFrame();
-		ImGui_ImplWin32_NewFrame();
-		ImGui::NewFrame();
-
-		ImGui::Begin("FrameRate");
-		ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-		ImGui::SliderFloat("Move Speed", &m_cameraMoveSpeed, 1.0f, 400.0f);
-		ImGui::Text("Pre-tesselation Vertex Count: %d", m_vertexCount);
-		const int tessFactor = 64;
-		int baseTriangles = m_vertexCount / 3;
-		int tessVertexCount = baseTriangles * ((tessFactor + 1) * (tessFactor + 2) / 2);
-		ImGui::Text("Tessellated Vertex Count: %d", tessVertexCount);
-		bool runtime_noise = m_constantBuffer.runtime_noise;
-		ImGui::Checkbox("Runtime Perlin Noise", &runtime_noise);
-		m_constantBuffer.runtime_noise = runtime_noise;
-		ImGui::End();
-
-		UINT descriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-
-		ImGui::Begin("Render To Texture");
-
-		/*if (ImGui::Button("Readback VT Page Requests")) 
 		{
+			// TODO async page request WIP
 			OPTICK_EVENT("Readback VT Page Requests");
 
 			CD3DX12_RESOURCE_BARRIER srvToCopyBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
@@ -1292,28 +1225,10 @@ void TerrainApp::Run()
 			m_commandList->ResourceBarrier(1, &copyToSrvBarrier);
 
 			m_checkVTpagesRequestAfterFrame = true;
-		}*/
+		}
 
-		CD3DX12_GPU_DESCRIPTOR_HANDLE rtSrvGpuHandle(
-			m_mainDescriptorHeap[m_frameIndex]->GetGPUDescriptorHandleForHeapStart(),
-			6, // Render Texture SRV
-			descriptorSize);
-
-		ImGui::Image((ImTextureID)rtSrvGpuHandle.ptr, ImVec2(m_width / 2, m_height / 2));
-
-		ImGui::End();
-
-		ImGui::Begin("VT Main Memory Texture");
-
-		if (ImGui::Button("Load VT Pages In VRAM"))
 		{
 			OPTICK_EVENT("Load VT Pages In VRAM");
-
-			for (int i = 0; i < 1000; i++) // TODO remove this please
-			{
-				if (m_VTpagesRequestResult.uploadHeaps[i])
-					m_VTpagesRequestResult.uploadHeaps[i]->Release();
-			}
 
 			std::string vtexPath;
 #if USE_TEST_VTEX
@@ -1332,16 +1247,16 @@ void TerrainApp::Run()
 				m_commandList->ResourceBarrier(1, &srvToCopyBarrier);
 
 				int i = 0;
-				for (auto it = m_VTpagesRequestResult.requestedPages.begin(); it != m_VTpagesRequestResult.requestedPages.end(); ++it, ++i) 
+				for (auto it = m_VTpagesRequestResult.requestedPages.begin(); it != m_VTpagesRequestResult.requestedPages.end(); ++it, ++i)
 				{
 					auto coords = *it;
 
 					bool alreadyLoadedPage = false;
-					for (const auto& loadedPage : m_VTpagesRequestResult.loadedPages) 
+					for (const auto& loadedPage : m_VTpagesRequestResult.loadedPages)
 					{
 						if (loadedPage.coords == coords) // page already loaded with same coords
 						{
-							std::cout << "VT Page request but page is already loaded : " << coords.first << ", " << coords.second << ")" << std::endl;
+							// std::cout << "VT Page request but page is already loaded : " << coords.first << ", " << coords.second << ")" << std::endl;
 							alreadyLoadedPage = true;
 							break;
 						}
@@ -1349,6 +1264,9 @@ void TerrainApp::Run()
 
 					if (alreadyLoadedPage)
 						continue;
+
+					if (i < 1000 && m_VTpagesRequestResult.uploadHeaps[i])
+						m_VTpagesRequestResult.uploadHeaps[i]->Release();
 
 					std::vector<char> texTileData;
 					if (VTex::LoadTile(vtexPath, coords.first, coords.second, texTileData))
@@ -1502,6 +1420,54 @@ void TerrainApp::Run()
 					D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 				m_commandList->ResourceBarrier(1, &pageTableToSrvBarrier);
 			}
+		}
+
+#if ENABLE_IMGUI
+
+		m_commandList->OMSetRenderTargets(1, &rtvHandle, false, nullptr);
+
+		// ------------------------------------------------ ImGui Commands ------------------------------------------------
+
+		ImGui_ImplDX12_NewFrame();
+		ImGui_ImplWin32_NewFrame();
+		ImGui::NewFrame();
+
+		ImGui::Begin("FrameRate");
+		ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+		ImGui::SliderFloat("Move Speed", &m_cameraMoveSpeed, 1.0f, 400.0f);
+		ImGui::Text("Pre-tesselation Vertex Count: %d", m_vertexCount);
+		const int tessFactor = 64;
+		int baseTriangles = m_vertexCount / 3;
+		int tessVertexCount = baseTriangles * ((tessFactor + 1) * (tessFactor + 2) / 2);
+		ImGui::Text("Tessellated Vertex Count: %d", tessVertexCount);
+		bool runtime_noise = m_constantBuffer.runtime_noise;
+		ImGui::Checkbox("Runtime Perlin Noise", &runtime_noise);
+		m_constantBuffer.runtime_noise = runtime_noise;
+		ImGui::End();
+
+		UINT descriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+		ImGui::Begin("Render To Texture");
+
+		if (ImGui::Button("Readback VT Page Requests")) 
+		{
+
+		}
+
+		CD3DX12_GPU_DESCRIPTOR_HANDLE rtSrvGpuHandle(
+			m_mainDescriptorHeap[m_frameIndex]->GetGPUDescriptorHandleForHeapStart(),
+			6, // Render Texture SRV
+			descriptorSize);
+
+		ImGui::Image((ImTextureID)rtSrvGpuHandle.ptr, ImVec2(m_width / 2, m_height / 2));
+
+		ImGui::End();
+
+		ImGui::Begin("VT Main Memory Texture");
+
+		if (ImGui::Button("Load VT Pages In VRAM"))
+		{
+			
 		}
 
 		CD3DX12_GPU_DESCRIPTOR_HANDLE VTSrvGpuHandle(
@@ -1705,12 +1671,8 @@ void TerrainApp::Run()
 				WaitForSingleObject(m_fenceEvent, INFINITE);
 			}
 
-			// BuildVTPageRequestResult();
-
-			if (!readbackPagesReqWorker.IsBusy()) 
-			{
-				readbackPagesReqWorker.StartWork();
-			}
+			if (m_VTpagesRequestResult.loadedPages.size() < 256)
+				BuildVTPageRequestResult();
 
 			m_checkVTpagesRequestAfterFrame = false;
 		}
@@ -2119,9 +2081,9 @@ void TerrainApp::BuildVTPageRequestResult()
 	D3D12_RANGE writeRange = { 0, 0 };
 	m_VTpagesRequestReadBackBuffer->Unmap(0, &writeRange);
 
-	for (const auto& coord : m_VTpagesRequestResult.requestedPages) {
+	/*for (const auto& coord : m_VTpagesRequestResult.requestedPages) {
 		std::cout << "Requested Page Coords : (" << coord.first << ", " << coord.second << ")" << std::endl;
 	}
 
-	std::cout << "------------------------------------" << std::endl;
+	std::cout << "------------------------------------" << std::endl;*/
 }
