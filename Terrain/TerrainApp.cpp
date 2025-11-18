@@ -1069,6 +1069,8 @@ TerrainApp::~TerrainApp()
 
 void TerrainApp::Run()
 {
+	ReadbackPageRequestWorker readbackPagesReqWorker([&] { BuildVTPageRequestResult(); });
+
 	while (m_isRunning)
 	{
 		// ------------------------------------------------ App Update ------------------------------------------------
@@ -1187,6 +1189,44 @@ void TerrainApp::Run()
 		m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
 		m_commandList->DrawIndexedInstanced(m_indexCount, 1, 0, 0, 0);
 
+		// TODO async page request WIP
+		OPTICK_EVENT("Readback VT Page Requests");
+
+		CD3DX12_RESOURCE_BARRIER srvToCopyBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
+			m_renderTexture.resource,
+			D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+			D3D12_RESOURCE_STATE_COPY_SOURCE);
+		m_commandList->ResourceBarrier(1, &srvToCopyBarrier);
+
+		D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint;
+		UINT64 RTreadbackBufferSize;
+		m_renderTexture.GetFootprint(m_device, footprint, RTreadbackBufferSize);
+
+		D3D12_TEXTURE_COPY_LOCATION rtSrcLocation = {};
+		rtSrcLocation.pResource = m_renderTexture.resource;
+		rtSrcLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+		rtSrcLocation.SubresourceIndex = 0;
+
+		D3D12_TEXTURE_COPY_LOCATION rtDstLocation = {};
+		rtDstLocation.pResource = m_VTpagesRequestReadBackBuffer;
+		rtDstLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+		rtDstLocation.PlacedFootprint.Offset = 0;
+		rtDstLocation.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		rtDstLocation.PlacedFootprint.Footprint.Width = m_width;
+		rtDstLocation.PlacedFootprint.Footprint.Height = m_height;
+		rtDstLocation.PlacedFootprint.Footprint.Depth = 1;
+		rtDstLocation.PlacedFootprint.Footprint.RowPitch = footprint.Footprint.RowPitch;
+
+		m_commandList->CopyTextureRegion(&rtDstLocation, 0, 0, 0, &rtSrcLocation, nullptr);
+
+		CD3DX12_RESOURCE_BARRIER copyToSrvBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
+			m_renderTexture.resource,
+			D3D12_RESOURCE_STATE_COPY_SOURCE,
+			D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+		m_commandList->ResourceBarrier(1, &copyToSrvBarrier);
+
+		m_checkVTpagesRequestAfterFrame = true;
+
 #if ENABLE_IMGUI
 
 		m_commandList->OMSetRenderTargets(1, &rtvHandle, false, nullptr);
@@ -1214,8 +1254,10 @@ void TerrainApp::Run()
 
 		ImGui::Begin("Render To Texture");
 
-		if (ImGui::Button("Readback VT Page Requests")) 
+		/*if (ImGui::Button("Readback VT Page Requests")) 
 		{
+			OPTICK_EVENT("Readback VT Page Requests");
+
 			CD3DX12_RESOURCE_BARRIER srvToCopyBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
 				m_renderTexture.resource,
 				D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
@@ -1250,7 +1292,7 @@ void TerrainApp::Run()
 			m_commandList->ResourceBarrier(1, &copyToSrvBarrier);
 
 			m_checkVTpagesRequestAfterFrame = true;
-		}
+		}*/
 
 		CD3DX12_GPU_DESCRIPTOR_HANDLE rtSrvGpuHandle(
 			m_mainDescriptorHeap[m_frameIndex]->GetGPUDescriptorHandleForHeapStart(),
@@ -1265,6 +1307,8 @@ void TerrainApp::Run()
 
 		if (ImGui::Button("Load VT Pages In VRAM"))
 		{
+			OPTICK_EVENT("Load VT Pages In VRAM");
+
 			for (int i = 0; i < 1000; i++) // TODO remove this please
 			{
 				if (m_VTpagesRequestResult.uploadHeaps[i])
@@ -1281,7 +1325,6 @@ void TerrainApp::Run()
 			VTexHeader vTexHeader;
 			if (VTex::LoadHeader(vtexPath, vTexHeader))
 			{
-
 				CD3DX12_RESOURCE_BARRIER srvToCopyBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
 					m_VTMainMemoryTexture.resource,
 					D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
@@ -1488,8 +1531,10 @@ void TerrainApp::Run()
 
 		ImGui::Begin("VTex Converter");
 
-		if (ImGui::Button("Convert TestVT to VTex"))
+		if (ImGui::Button("Convert Tex to VTex"))
 		{
+			OPTICK_EVENT("Convert Tex to VTex");
+
 #if USE_TEST_VTEX
 			VTex::ConvertToVTex("Assets/TestVT2.png", 4 /* 4x4 tiles for testing */);
 			VTex::ConvertToVTex("../../../../Terrain/Assets/TestVT2.png", 4 /* 4x4 tiles for testing */);
@@ -1659,7 +1704,14 @@ void TerrainApp::Run()
 				m_fences[m_frameIndex]->SetEventOnCompletion(m_fenceValues[m_frameIndex], m_fenceEvent);
 				WaitForSingleObject(m_fenceEvent, INFINITE);
 			}
-			BuildVTPageRequestResult();
+
+			// BuildVTPageRequestResult();
+
+			if (!readbackPagesReqWorker.IsBusy()) 
+			{
+				readbackPagesReqWorker.StartWork();
+			}
+
 			m_checkVTpagesRequestAfterFrame = false;
 		}
 	}

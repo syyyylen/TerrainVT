@@ -1,5 +1,10 @@
 #pragma once
 #include "Core.h"
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <atomic>
+#include <functional>
 #include "Camera.h"
 #include "Texture.h"
 #include "ShaderCompiler.h"
@@ -161,7 +166,7 @@ private:
 	// VT
 	ID3D12PipelineState* m_renderToTexturePSO = nullptr;
 	ID3D12Resource* m_VTpagesRequestReadBackBuffer = nullptr;
-	VTPageRequestResult m_VTpagesRequestResult = {};
+	VTPageRequestResult m_VTpagesRequestResult = {}; // TODO can now be accessed from worker thread, protect it
 	bool m_checkVTpagesRequestAfterFrame = false;
 	Texture m_VTMainMemoryTexture = {};
 	Texture m_VTPageTableTexture = {};
@@ -174,4 +179,76 @@ private:
 #if ENABLE_IMGUI
 	static const int IMGUI_DESCRIPTOR_OFFSET = 30;
 #endif
+
+	// ------------------------ MT ------------------------
+
+	class ReadbackPageRequestWorker 
+	{
+	public:
+		ReadbackPageRequestWorker(std::function<void()> func) : m_buildVTPageRequestResult(std::move(func))
+		{
+			m_worker = std::thread(&ReadbackPageRequestWorker::Run, this);
+		}
+
+		~ReadbackPageRequestWorker() 
+		{
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				m_isRunning = false;
+			}
+
+			m_conditionVariable.notify_one();
+
+			if (m_worker.joinable()) 
+				m_worker.join();
+		}
+
+		bool StartWork() 
+		{
+			if (m_isBusy) 
+				return false;
+
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				m_workerAvailable = true;
+			}
+
+			m_conditionVariable.notify_one();
+			return true;
+		}
+
+		bool IsBusy() const { return m_isBusy; }
+
+	private:
+		void Run() 
+		{
+			while (m_isRunning) 
+			{
+				std::unique_lock<std::mutex> lock(m_mutex);
+
+				m_conditionVariable.wait(lock, [this] {
+					return m_workerAvailable || !m_isRunning; 
+					});
+
+				if (!m_isRunning) break;
+
+				m_workerAvailable = false;
+				m_isBusy = true;
+				lock.unlock();
+
+				if (m_buildVTPageRequestResult)
+					m_buildVTPageRequestResult();
+
+				m_isBusy = false;
+			}
+		}
+
+		std::function<void()> m_buildVTPageRequestResult;
+		std::thread m_worker;
+		std::mutex m_mutex;
+		std::condition_variable m_conditionVariable;
+		std::atomic<bool> m_isRunning = true;
+		std::atomic<bool> m_isBusy = false;
+		bool m_workerAvailable = false;
+	};
 };
