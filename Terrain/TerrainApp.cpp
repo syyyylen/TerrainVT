@@ -6,6 +6,8 @@
 #include "Include/ImGui/imgui.h"
 #endif
 
+#include "Include/Optick/optick.h"
+
 // ------------------------------------------------ Window Proc ------------------------------------------------
 
 extern LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -1071,6 +1073,8 @@ void TerrainApp::Run()
 	{
 		// ------------------------------------------------ App Update ------------------------------------------------
 
+		OPTICK_FRAME("Terrain App");
+
 		float time = static_cast<float>(clock()) - m_startTime;
 		float dt = (time - m_lastTime) / 1000.0f;
 		m_lastTime = time;
@@ -1101,6 +1105,8 @@ void TerrainApp::Run()
 		memcpy(m_constantBufferGPUAddress[m_frameIndex], &m_constantBuffer, sizeof(m_constantBuffer));
 
 		// ------------------------------------------------ D3D12 Commands ------------------------------------------------
+
+		OPTICK_EVENT("Render Frame");
 
 		HRESULT hr;
 
@@ -1996,6 +2002,8 @@ void TerrainApp::SaveHeightmapToPNG(const std::string& filepath)
 
 void TerrainApp::BuildVTPageRequestResult()
 {
+	OPTICK_EVENT("Build VT Page Request Results");
+
 	D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint;
 	UINT64 RTreadbackBufferSize;
 	m_renderTexture.GetFootprint(m_device, footprint, RTreadbackBufferSize);

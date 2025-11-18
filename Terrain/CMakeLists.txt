@@ -28,7 +28,16 @@ ${SHADER_FILES}
 "Include/ImGui/imgui_draw.cpp" "Include/ImGui/imgui_impl_dx12.cpp" "Include/ImGui/imgui_impl_dx12.h" 
 "Include/ImGui/imgui_impl_win32.cpp" "Include/ImGui/imgui_impl_win32.h" "Include/ImGui/imgui_internal.h" 
 "Include/ImGui/imgui_tables.cpp" "Include/ImGui/imgui_widgets.cpp" "Include/ImGui/imstb_rectpack.h" 
-"Include/ImGui/imstb_textedit.h" "Include/ImGui/imstb_truetype.h")
+"Include/ImGui/imstb_textedit.h" "Include/ImGui/imstb_truetype.h" 
+"Include/Optick/optick.config.h" "Include/Optick/optick.h" "Include/Optick/optick_capi.cpp" 
+"Include/Optick/optick_capi.h" "Include/Optick/optick_common.h" "Include/Optick/optick_core.cpp" 
+"Include/Optick/optick_core.freebsd.h" "Include/Optick/optick_core.h" "Include/Optick/optick_core.linux.h" 
+"Include/Optick/optick_core.macos.h" "Include/Optick/optick_core.platform.h" "Include/Optick/optick_core.win.h" 
+"Include/Optick/optick_gpu.cpp" "Include/Optick/optick_gpu.d3d12.cpp" "Include/Optick/optick_gpu.h" 
+"Include/Optick/optick_memory.h" "Include/Optick/optick_message.cpp" 
+"Include/Optick/optick_message.h" "Include/Optick/optick_miniz.cpp" "Include/Optick/optick_miniz.h" 
+"Include/Optick/optick_serialization.cpp" "Include/Optick/optick_serialization.h" 
+"Include/Optick/optick_server.cpp" "Include/Optick/optick_server.h")
 
 # Include D3D12
 target_link_libraries(Terrain PUBLIC d3d12.lib d3dcompiler.lib dxcompiler.lib dxgi.lib)
