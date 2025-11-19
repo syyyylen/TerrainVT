@@ -21,7 +21,8 @@ struct Texture
         ID3D12GraphicsCommandList* commandList,
         const std::string& filepath,
         DXGI_FORMAT textureFormat = DXGI_FORMAT_R8G8B8A8_UNORM,
-        bool flip = true);
+        bool flip = true,
+        D3D12_RESOURCE_STATES finalState = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
     void CreateEmpty(
         ID3D12Device* device,

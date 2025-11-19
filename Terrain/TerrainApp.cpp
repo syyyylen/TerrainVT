@@ -117,6 +117,30 @@ TerrainApp::TerrainApp()
 
 	HRESULT hr;
 
+#ifdef _DEBUG
+	{
+		ID3D12Debug* debugController = nullptr;
+		if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController))))
+		{
+			debugController->EnableDebugLayer();
+			debugController->Release();
+			std::cout << "D3D12 Debug Layer Enabled" << std::endl;
+
+			ID3D12Debug1* debugController1 = nullptr;
+			if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController1))))
+			{
+				debugController1->SetEnableGPUBasedValidation(true);
+				debugController1->Release();
+				std::cout << "D3D12 GPU-Based Validation Enabled" << std::endl;
+			}
+		}
+		else
+		{
+			std::cerr << "Could not enable D3D12 Debug Layer" << std::endl;
+		}
+	}
+#endif
+
 	IDXGIFactory4* dxgiFactory;
 	hr = CreateDXGIFactory1(IID_PPV_ARGS(&dxgiFactory));
 
@@ -136,6 +160,7 @@ TerrainApp::TerrainApp()
 
 		if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
 		{
+			adapter->Release();
 			adapterIndex++;
 			continue;
 		}
@@ -148,11 +173,13 @@ TerrainApp::TerrainApp()
 			break;
 		}
 
+		adapter->Release();
 		adapterIndex++;
 	}
 
 	if (!adapterFound)
 	{
+		dxgiFactory->Release();
 		return;
 	}
 
@@ -160,8 +187,30 @@ TerrainApp::TerrainApp()
 
 	if (FAILED(hr))
 	{
+		adapter->Release();
+		dxgiFactory->Release();
 		return;
 	}
+
+#ifdef _DEBUG
+	{
+		ID3D12InfoQueue* infoQueue = nullptr;
+		if (SUCCEEDED(m_device->QueryInterface(IID_PPV_ARGS(&infoQueue))))
+		{
+			infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, TRUE);
+			infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, TRUE);
+			// infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, TRUE);
+
+			D3D12_MESSAGE_ID DenyIds[] = { D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE };
+			D3D12_INFO_QUEUE_FILTER filter = {};
+			filter.DenyList.NumIDs = _countof(DenyIds);
+			filter.DenyList.pIDList = DenyIds;
+			infoQueue->AddStorageFilterEntries(&filter);
+
+			infoQueue->Release();
+		}
+	}
+#endif
 
 	DXGI_ADAPTER_DESC Desc;
 	adapter->GetDesc(&Desc);
@@ -169,6 +218,8 @@ TerrainApp::TerrainApp()
 	std::string DeviceName = std::string(WideName.begin(), WideName.end());
 
 	std::cout << "D3D12 Device : " << DeviceName << std::endl;
+
+	adapter->Release();
 
 	// ------------------------------------------------ D3D12 Init (Cmd Queue, Swap Chain) ------------------------------------------------
 
@@ -179,8 +230,19 @@ TerrainApp::TerrainApp()
 
 	if (FAILED(hr))
 	{
+		dxgiFactory->Release();
 		return;
 	}
+
+	/*D3D12_COMMAND_QUEUE_DESC copyCqDesc = {};
+	copyCqDesc.Type = D3D12_COMMAND_LIST_TYPE_COPY;
+
+	hr = m_device->CreateCommandQueue(&copyCqDesc, IID_PPV_ARGS(&m_copyCommandQueue));
+
+	if (FAILED(hr))
+	{
+		return;
+	}*/
 
 	DXGI_SAMPLE_DESC sampleDesc = {};
 	sampleDesc.Count = 1;
@@ -195,17 +257,20 @@ TerrainApp::TerrainApp()
 	swapChainDesc.Width = width;
 	swapChainDesc.Height = height;
 
-	IDXGISwapChain1* tempSwapChain;
+	IDXGISwapChain1* tempSwapChain = nullptr;
 
 	hr = dxgiFactory->CreateSwapChainForHwnd(m_graphicsCommandQueue, m_hwnd, &swapChainDesc, nullptr, nullptr, &tempSwapChain);
 
 	if (FAILED(hr))
 	{
+		dxgiFactory->Release();
 		return;
 	}
 
 	tempSwapChain->QueryInterface(IID_PPV_ARGS(&m_swapChain));
 	tempSwapChain->Release();
+
+	dxgiFactory->Release();
 
 	m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
 
@@ -274,7 +339,7 @@ TerrainApp::TerrainApp()
 		D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL
 	);
 
-	m_device->CreateCommittedResource(
+	hr = m_device->CreateCommittedResource(
 		&heapPropDefault,
 		D3D12_HEAP_FLAG_NONE,
 		&depthStencilDescRes,
@@ -282,6 +347,11 @@ TerrainApp::TerrainApp()
 		&depthOptimizedClearValue,
 		IID_PPV_ARGS(&m_depthStencilBuffer)
 	);
+
+	if (FAILED(hr))
+	{
+		return;
+	}
 
 	m_dsDescriptorHeap->SetName(L"Depth/Stencil Resource Heap");
 
@@ -328,7 +398,7 @@ TerrainApp::TerrainApp()
 		memcpy(m_constantBufferGPUAddress[i], &m_constantBuffer, sizeof(m_constantBuffer));
 	}
 
-	// ------------------------------------------------ D3D12 Init (Cmd List, Fences) ------------------------------------------------
+	// ------------------------------------------------ D3D12 Init (Cmd Lists, Fences) ------------------------------------------------
 
 	for (int i = 0; i < FRAMES_IN_FLIGHT; i++)
 	{
@@ -340,12 +410,24 @@ TerrainApp::TerrainApp()
 		}
 	}
 
-	hr = m_device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_commandAllocators[0], NULL, IID_PPV_ARGS(&m_commandList));
+	hr = m_device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_commandAllocators[0], nullptr, IID_PPV_ARGS(&m_commandList));
 
 	if (FAILED(hr))
 	{
 		return;
 	}
+
+	/*for (int i = 0; i < FRAMES_IN_FLIGHT; i++)
+	{
+		hr = m_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_COPY, IID_PPV_ARGS(&m_copyCommandAllocators[i]));
+
+		if (FAILED(hr))
+		{
+			return;
+		}
+	}
+
+	m_device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_COPY, m_copyCommandAllocators[0], nullptr, IID_PPV_ARGS(&m_copyCommandList));*/
 
 	for (int i = 0; i < FRAMES_IN_FLIGHT; i++)
 	{
@@ -501,6 +583,7 @@ TerrainApp::TerrainApp()
 	psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
 	psoDesc.NumRenderTargets = 1;
 	psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+	psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
 
 	hr = m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pipelineStateObject));
 
@@ -525,6 +608,7 @@ TerrainApp::TerrainApp()
 	rtPsoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
 	rtPsoDesc.NumRenderTargets = 1;
 	rtPsoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+	rtPsoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
 
 	hr = m_device->CreateGraphicsPipelineState(&rtPsoDesc, IID_PPV_ARGS(&m_renderToTexturePSO));
 
@@ -657,20 +741,25 @@ TerrainApp::TerrainApp()
 
 	CD3DX12_RESOURCE_DESC descBufferSize = CD3DX12_RESOURCE_DESC::Buffer(vBufferSize);
 
-	m_device->CreateCommittedResource(
+	hr = m_device->CreateCommittedResource(
 		&heapPropDefault,
 		D3D12_HEAP_FLAG_NONE,
 		&descBufferSize,
-		D3D12_RESOURCE_STATE_COPY_DEST,
+		D3D12_RESOURCE_STATE_COMMON,
 		nullptr,
 		IID_PPV_ARGS(&m_vertexBuffer));
+
+	if (FAILED(hr))
+	{
+		return;
+	}
 
 	m_vertexBuffer->SetName(L"Vertex Buffer Resource Heap");
 
 	CD3DX12_HEAP_PROPERTIES heapPropUpload = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
 
 	ID3D12Resource* vBufferUploadHeap;
-	m_device->CreateCommittedResource(
+	hr = m_device->CreateCommittedResource(
 		&heapPropUpload,
 		D3D12_HEAP_FLAG_NONE,
 		&descBufferSize,
@@ -678,7 +767,15 @@ TerrainApp::TerrainApp()
 		nullptr,
 		IID_PPV_ARGS(&vBufferUploadHeap));
 
+	if (FAILED(hr))
+	{
+		return;
+	}
+
 	vBufferUploadHeap->SetName(L"Vertex Buffer Upload Resource Heap");
+
+	CD3DX12_RESOURCE_BARRIER toCopyDestBarrier = CD3DX12_RESOURCE_BARRIER::Transition(m_vertexBuffer, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
+	m_commandList->ResourceBarrier(1, &toCopyDestBarrier);
 
 	D3D12_SUBRESOURCE_DATA vertexData = {};
 	vertexData.pData = reinterpret_cast<BYTE*>(vList.data());
@@ -695,18 +792,23 @@ TerrainApp::TerrainApp()
 
 	CD3DX12_RESOURCE_DESC descIndexBufferSize = CD3DX12_RESOURCE_DESC::Buffer(iBufferSize);
 
-	m_device->CreateCommittedResource(
+	hr = m_device->CreateCommittedResource(
 		&heapPropDefault,
 		D3D12_HEAP_FLAG_NONE,
 		&descIndexBufferSize,
-		D3D12_RESOURCE_STATE_COPY_DEST,
+		D3D12_RESOURCE_STATE_COMMON,
 		nullptr,
 		IID_PPV_ARGS(&m_indexBuffer));
 
-	m_vertexBuffer->SetName(L"Index Buffer Resource Heap");
+	if (FAILED(hr))
+	{
+		return;
+	}
+
+	m_indexBuffer->SetName(L"Index Buffer Resource Heap");
 
 	ID3D12Resource* iBufferUploadHeap;
-	m_device->CreateCommittedResource(
+	hr = m_device->CreateCommittedResource(
 		&heapPropUpload,
 		D3D12_HEAP_FLAG_NONE,
 		&descIndexBufferSize,
@@ -714,7 +816,15 @@ TerrainApp::TerrainApp()
 		nullptr,
 		IID_PPV_ARGS(&iBufferUploadHeap));
 
-	vBufferUploadHeap->SetName(L"Index Buffer Upload Resource Heap");
+	if (FAILED(hr))
+	{
+		return;
+	}
+
+	iBufferUploadHeap->SetName(L"Index Buffer Upload Resource Heap");
+
+	CD3DX12_RESOURCE_BARRIER toIndexCopyDestBarrier = CD3DX12_RESOURCE_BARRIER::Transition(m_indexBuffer, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
+	m_commandList->ResourceBarrier(1, &toIndexCopyDestBarrier);
 
 	D3D12_SUBRESOURCE_DATA indexData = {};
 	indexData.pData = reinterpret_cast<BYTE*>(iList.data());
@@ -723,7 +833,8 @@ TerrainApp::TerrainApp()
 
 	UpdateSubresources(m_commandList, m_indexBuffer, iBufferUploadHeap, 0, 0, 1, &indexData);
 
-	m_commandList->ResourceBarrier(1, &copyToVsBarrier);
+	CD3DX12_RESOURCE_BARRIER indexToReadBarrier = CD3DX12_RESOURCE_BARRIER::Transition(m_indexBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_INDEX_BUFFER);
+	m_commandList->ResourceBarrier(1, &indexToReadBarrier);
 
 	// ------------------------------------------------ Terrain Test Texture ------------------------------------------------
 
@@ -743,7 +854,7 @@ TerrainApp::TerrainApp()
 
 	// ------------------------------------------------ Baked Heightmap Loading ------------------------------------------------
 
-	m_bakedHeightmapTexture.LoadFromFile(m_device, m_commandList, "Assets/HeightMap.png", DXGI_FORMAT_R32_FLOAT);
+	m_bakedHeightmapTexture.LoadFromFile(m_device, m_commandList, "Assets/HeightMap.png", DXGI_FORMAT_R32_FLOAT, true, D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE);
 
 	for (int i = 0; i < FRAMES_IN_FLIGHT; ++i)
 	{
@@ -1074,6 +1185,8 @@ TerrainApp::~TerrainApp()
 
 void TerrainApp::Run()
 {
+	bool firstFrame = false;
+
 	while (m_isRunning)
 	{
 		// ------------------------------------------------ App Update ------------------------------------------------
@@ -1453,13 +1566,8 @@ void TerrainApp::Run()
 
 		ImGui::Begin("Render To Texture");
 
-		if (ImGui::Button("Readback VT Page Requests")) 
-		{
-
-		}
-
 		CD3DX12_GPU_DESCRIPTOR_HANDLE rtSrvGpuHandle(
-			m_mainDescriptorHeap[m_frameIndex]->GetGPUDescriptorHandleForHeapStart(),
+			m_mainDescriptorHeap[0]->GetGPUDescriptorHandleForHeapStart(),
 			6, // Render Texture SRV
 			descriptorSize);
 
@@ -1469,17 +1577,12 @@ void TerrainApp::Run()
 
 		ImGui::Begin("VT Main Memory Texture");
 
-		if (ImGui::Button("Load VT Pages In VRAM"))
-		{
-			
-		}
-
 		CD3DX12_GPU_DESCRIPTOR_HANDLE VTSrvGpuHandle(
-			m_mainDescriptorHeap[m_frameIndex]->GetGPUDescriptorHandleForHeapStart(),
+			m_mainDescriptorHeap[0]->GetGPUDescriptorHandleForHeapStart(),
 			3, // VT Main Memory Texture SRV
 			descriptorSize);
 
-		if (ImGui::Button("Clear Loaded Pages")) 
+		if (ImGui::Button("Clear Loaded Pages"))
 		{
 			m_VTpagesRequestResult.loadedPages.clear();
 		}
@@ -1488,7 +1591,7 @@ void TerrainApp::Run()
 		ImGui::Image((ImTextureID)VTSrvGpuHandle.ptr, ImVec2(320, 320));
 
 		CD3DX12_GPU_DESCRIPTOR_HANDLE VTPageTablesrvGpuHandle(
-			m_mainDescriptorHeap[m_frameIndex]->GetGPUDescriptorHandleForHeapStart(),
+			m_mainDescriptorHeap[0]->GetGPUDescriptorHandleForHeapStart(),
 			4, // VT Pagetable Texture SRV
 			descriptorSize);
 
@@ -1500,7 +1603,6 @@ void TerrainApp::Run()
 		ImGui::End();
 
 		ImGui::Begin("VTex Converter");
-
 		if (ImGui::Button("Convert Tex to VTex"))
 		{
 			OPTICK_EVENT("Convert Tex to VTex");
@@ -1542,75 +1644,11 @@ void TerrainApp::Run()
 
 			if (ImGui::Button("Bake Heightmap"))
 			{
-				CD3DX12_RESOURCE_BARRIER srvToUavBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
-					m_computeOutputTexture.resource,
-					D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
-					D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-
-				m_commandList->SetPipelineState(m_computePipelineState);
-				m_commandList->SetComputeRootSignature(m_computeRootSignature);
-
-				CD3DX12_GPU_DESCRIPTOR_HANDLE cbvGpuHandle(
-					m_mainDescriptorHeap[m_frameIndex]->GetGPUDescriptorHandleForHeapStart(),
-					0, // Constant Buffer (b0)
-					descriptorSize);
-				m_commandList->SetComputeRootDescriptorTable(0, cbvGpuHandle);
-
-				CD3DX12_GPU_DESCRIPTOR_HANDLE uavGpuHandle(
-					m_mainDescriptorHeap[m_frameIndex]->GetGPUDescriptorHandleForHeapStart(),
-					9, // Compute UAV (u0)
-					descriptorSize);
-				m_commandList->SetComputeRootDescriptorTable(1, uavGpuHandle);
-
-				m_commandList->Dispatch(135, 135, 1);
-
-				CD3DX12_RESOURCE_BARRIER uavToCopyBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
-					m_computeOutputTexture.resource,
-					D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-					D3D12_RESOURCE_STATE_COPY_SOURCE);
-				m_commandList->ResourceBarrier(1, &uavToCopyBarrier);
-
-				D3D12_TEXTURE_COPY_LOCATION heightmapSrcLocation = {};
-				heightmapSrcLocation.pResource = m_computeOutputTexture.resource;
-				heightmapSrcLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-				heightmapSrcLocation.SubresourceIndex = 0;
-
-				D3D12_TEXTURE_COPY_LOCATION heightmapDstLocation = {};
-				heightmapDstLocation.pResource = m_heightmapReadbackBuffer;
-				heightmapDstLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-				heightmapDstLocation.PlacedFootprint.Offset = 0;
-				heightmapDstLocation.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R32_FLOAT;
-				heightmapDstLocation.PlacedFootprint.Footprint.Width = 1080;
-				heightmapDstLocation.PlacedFootprint.Footprint.Height = 1080;
-				heightmapDstLocation.PlacedFootprint.Footprint.Depth = 1;
-				heightmapDstLocation.PlacedFootprint.Footprint.RowPitch = 1080 * 4;
-
-				m_commandList->CopyTextureRegion(&heightmapDstLocation, 0, 0, 0, &heightmapSrcLocation, nullptr);
-
-				CD3DX12_RESOURCE_BARRIER bakedTexturesToCopyDestBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
-					m_bakedHeightmapTexture.resource,
-					D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
-					D3D12_RESOURCE_STATE_COPY_DEST);
-				m_commandList->ResourceBarrier(1, &bakedTexturesToCopyDestBarrier);
-
-				m_commandList->CopyResource(m_bakedHeightmapTexture.resource, m_computeOutputTexture.resource);
-
-				CD3DX12_RESOURCE_BARRIER allTexturesToSrvBarriers[2];
-				allTexturesToSrvBarriers[0] = CD3DX12_RESOURCE_BARRIER::Transition(
-					m_computeOutputTexture.resource,
-					D3D12_RESOURCE_STATE_COPY_SOURCE,
-					D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-				allTexturesToSrvBarriers[1] = CD3DX12_RESOURCE_BARRIER::Transition(
-					m_bakedHeightmapTexture.resource,
-					D3D12_RESOURCE_STATE_COPY_DEST,
-					D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-				m_commandList->ResourceBarrier(2, allTexturesToSrvBarriers);
-
-				m_saveHeightmapAfterFrame = true;
+				BakeHeightMap();
 			}
 
 			CD3DX12_GPU_DESCRIPTOR_HANDLE heightSrvGpuHandle(
-				m_mainDescriptorHeap[m_frameIndex]->GetGPUDescriptorHandleForHeapStart(),
+				m_mainDescriptorHeap[0]->GetGPUDescriptorHandleForHeapStart(),
 				5, // Compute Heightmap SRV
 				descriptorSize);
 
@@ -1619,6 +1657,10 @@ void TerrainApp::Run()
 		}
 
 		ImGui::Render();
+
+		ID3D12DescriptorHeap* imguiHeaps[] = { m_mainDescriptorHeap[0] };
+		m_commandList->SetDescriptorHeaps(_countof(imguiHeaps), imguiHeaps);
+
 		ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), m_commandList);
 
 #endif
@@ -1639,7 +1681,7 @@ void TerrainApp::Run()
 		ID3D12CommandList* ppCommandLists[] = { m_commandList };
 
 		m_graphicsCommandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
-
+		
 		hr = m_graphicsCommandQueue->Signal(m_fences[m_frameIndex], m_fenceValues[m_frameIndex]);
 
 		if (FAILED(hr))
@@ -1652,6 +1694,17 @@ void TerrainApp::Run()
 		if (FAILED(hr))
 		{
 			return;
+		}
+
+		// We need the first readback copy to have finished for now,
+		// will become unecessary with proper copy queue async flow
+		if (!firstFrame)
+		{
+			if (m_fences[m_frameIndex]->GetCompletedValue() < m_fenceValues[m_frameIndex])
+			{
+				m_fences[m_frameIndex]->SetEventOnCompletion(m_fenceValues[m_frameIndex], m_fenceEvent);
+				WaitForSingleObject(m_fenceEvent, INFINITE);
+			}
 		}
 
 		if (m_saveHeightmapAfterFrame)
@@ -1675,6 +1728,8 @@ void TerrainApp::Run()
 
 			m_hasVTpageRequestPending[m_frameIndex] = false;
 		}
+
+		firstFrame = true;
 	}
 }
 
@@ -1983,7 +2038,78 @@ void TerrainApp::UpdateInputs()
 	}
 }
 
-// ------------------------------------------------ Heightmap Saving ------------------------------------------------
+// ------------------------------------------------ Heightmap Baking/Saving ------------------------------------------------
+
+void TerrainApp::BakeHeightMap()
+{
+	UINT descriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+	CD3DX12_RESOURCE_BARRIER srvToUavBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
+		m_computeOutputTexture.resource,
+		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+		D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+	m_commandList->SetPipelineState(m_computePipelineState);
+	m_commandList->SetComputeRootSignature(m_computeRootSignature);
+
+	CD3DX12_GPU_DESCRIPTOR_HANDLE cbvGpuHandle(
+		m_mainDescriptorHeap[m_frameIndex]->GetGPUDescriptorHandleForHeapStart(),
+		0, // Constant Buffer (b0)
+		descriptorSize);
+	m_commandList->SetComputeRootDescriptorTable(0, cbvGpuHandle);
+
+	CD3DX12_GPU_DESCRIPTOR_HANDLE uavGpuHandle(
+		m_mainDescriptorHeap[m_frameIndex]->GetGPUDescriptorHandleForHeapStart(),
+		9, // Compute UAV (u0)
+		descriptorSize);
+	m_commandList->SetComputeRootDescriptorTable(1, uavGpuHandle);
+
+	m_commandList->Dispatch(135, 135, 1);
+
+	CD3DX12_RESOURCE_BARRIER uavToCopyBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
+		m_computeOutputTexture.resource,
+		D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+		D3D12_RESOURCE_STATE_COPY_SOURCE);
+	m_commandList->ResourceBarrier(1, &uavToCopyBarrier);
+
+	D3D12_TEXTURE_COPY_LOCATION heightmapSrcLocation = {};
+	heightmapSrcLocation.pResource = m_computeOutputTexture.resource;
+	heightmapSrcLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+	heightmapSrcLocation.SubresourceIndex = 0;
+
+	D3D12_TEXTURE_COPY_LOCATION heightmapDstLocation = {};
+	heightmapDstLocation.pResource = m_heightmapReadbackBuffer;
+	heightmapDstLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+	heightmapDstLocation.PlacedFootprint.Offset = 0;
+	heightmapDstLocation.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R32_FLOAT;
+	heightmapDstLocation.PlacedFootprint.Footprint.Width = 1080;
+	heightmapDstLocation.PlacedFootprint.Footprint.Height = 1080;
+	heightmapDstLocation.PlacedFootprint.Footprint.Depth = 1;
+	heightmapDstLocation.PlacedFootprint.Footprint.RowPitch = 1080 * 4;
+
+	m_commandList->CopyTextureRegion(&heightmapDstLocation, 0, 0, 0, &heightmapSrcLocation, nullptr);
+
+	CD3DX12_RESOURCE_BARRIER bakedTexturesToCopyDestBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
+		m_bakedHeightmapTexture.resource,
+		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+		D3D12_RESOURCE_STATE_COPY_DEST);
+	m_commandList->ResourceBarrier(1, &bakedTexturesToCopyDestBarrier);
+
+	m_commandList->CopyResource(m_bakedHeightmapTexture.resource, m_computeOutputTexture.resource);
+
+	CD3DX12_RESOURCE_BARRIER allTexturesToSrvBarriers[2];
+	allTexturesToSrvBarriers[0] = CD3DX12_RESOURCE_BARRIER::Transition(
+		m_computeOutputTexture.resource,
+		D3D12_RESOURCE_STATE_COPY_SOURCE,
+		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+	allTexturesToSrvBarriers[1] = CD3DX12_RESOURCE_BARRIER::Transition(
+		m_bakedHeightmapTexture.resource,
+		D3D12_RESOURCE_STATE_COPY_DEST,
+		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+	m_commandList->ResourceBarrier(2, allTexturesToSrvBarriers);
+
+	m_saveHeightmapAfterFrame = true;
+}
 
 void TerrainApp::SaveHeightmapToPNG(const std::string& filepath)
 {
@@ -2019,6 +2145,8 @@ void TerrainApp::SaveHeightmapToPNG(const std::string& filepath)
 		std::cout << "Failed to write heightmap to " << filepath << std::endl;
 	}
 }
+
+// ------------------------------------------------ VT Pages Request Readback ------------------------------------------------
 
 void TerrainApp::BuildVTPageRequestResult()
 {

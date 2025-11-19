@@ -32,6 +32,7 @@ private:
 
 	void WaitForPreviousFrame();
 
+	void BakeHeightMap();
 	void SaveHeightmapToPNG(const std::string& filepath);
 	void BuildVTPageRequestResult();
 
@@ -166,9 +167,7 @@ private:
 	// Copy Queue
 	/*ID3D12CommandQueue* m_copyCommandQueue;
 	ID3D12CommandAllocator* m_copyCommandAllocators[FRAMES_IN_FLIGHT] = {};
-	ID3D12GraphicsCommandList* m_copyCommandList;
-	ID3D12Fence* m_copyFence;
-	UINT64 m_copyFenceValues[FRAMES_IN_FLIGHT] = {};*/
+	ID3D12GraphicsCommandList* m_copyCommandList;*/
 
 	// VT
 	ID3D12PipelineState* m_renderToTexturePSO = nullptr;

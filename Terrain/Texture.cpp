@@ -32,7 +32,8 @@ void Texture::LoadFromFile(
     ID3D12GraphicsCommandList* commandList,
     const std::string& filepath,
     DXGI_FORMAT textureFormat,
-    bool flip)
+    bool flip,
+    D3D12_RESOURCE_STATES finalState)
 {
     int desiredChannels = STBI_rgb_alpha;
     int bytesPerPixel = 4;
@@ -116,7 +117,7 @@ void Texture::LoadFromFile(
     CD3DX12_RESOURCE_BARRIER textureTransition = CD3DX12_RESOURCE_BARRIER::Transition(
         resource,
         D3D12_RESOURCE_STATE_COPY_DEST,
-        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        finalState);
 
     commandList->ResourceBarrier(1, &textureTransition);
 }
