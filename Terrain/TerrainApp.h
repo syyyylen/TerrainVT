@@ -124,7 +124,7 @@ private:
 
 	ID3D12Device* m_device = nullptr;
 	IDXGISwapChain3* m_swapChain = nullptr;
-	ID3D12CommandQueue* m_commandQueue = nullptr;
+	ID3D12CommandQueue* m_graphicsCommandQueue = nullptr;
 	ID3D12DescriptorHeap* m_rtvDescriptorHeap = nullptr;
 	ID3D12Resource* m_renderTargets[FRAMES_IN_FLIGHT] = {};
 	ID3D12CommandAllocator* m_commandAllocators[FRAMES_IN_FLIGHT] = {};
@@ -163,11 +163,18 @@ private:
 	ID3D12Resource* m_heightmapReadbackBuffer = nullptr;
 	bool m_saveHeightmapAfterFrame = false;
 
+	// Copy Queue
+	/*ID3D12CommandQueue* m_copyCommandQueue;
+	ID3D12CommandAllocator* m_copyCommandAllocators[FRAMES_IN_FLIGHT] = {};
+	ID3D12GraphicsCommandList* m_copyCommandList;
+	ID3D12Fence* m_copyFence;
+	UINT64 m_copyFenceValues[FRAMES_IN_FLIGHT] = {};*/
+
 	// VT
 	ID3D12PipelineState* m_renderToTexturePSO = nullptr;
-	ID3D12Resource* m_VTpagesRequestReadBackBuffer = nullptr;
-	VTPageRequestResult m_VTpagesRequestResult = {}; // TODO can now be accessed from worker thread, protect it
-	bool m_checkVTpagesRequestAfterFrame = false;
+	ID3D12Resource* m_VTpagesRequestReadBackBuffer[FRAMES_IN_FLIGHT] = {};
+	VTPageRequestResult m_VTpagesRequestResult = {};
+	bool m_hasVTpageRequestPending[FRAMES_IN_FLIGHT] = {};
 	Texture m_VTMainMemoryTexture = {};
 	Texture m_VTPageTableTexture = {};
 

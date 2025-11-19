@@ -173,8 +173,9 @@ TerrainApp::TerrainApp()
 	// ------------------------------------------------ D3D12 Init (Cmd Queue, Swap Chain) ------------------------------------------------
 
 	D3D12_COMMAND_QUEUE_DESC cqDesc = {};
+	cqDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
 
-	hr = m_device->CreateCommandQueue(&cqDesc, IID_PPV_ARGS(&m_commandQueue));
+	hr = m_device->CreateCommandQueue(&cqDesc, IID_PPV_ARGS(&m_graphicsCommandQueue));
 
 	if (FAILED(hr))
 	{
@@ -196,7 +197,7 @@ TerrainApp::TerrainApp()
 
 	IDXGISwapChain1* tempSwapChain;
 
-	hr = dxgiFactory->CreateSwapChainForHwnd(m_commandQueue, m_hwnd, &swapChainDesc, nullptr, nullptr, &tempSwapChain);
+	hr = dxgiFactory->CreateSwapChainForHwnd(m_graphicsCommandQueue, m_hwnd, &swapChainDesc, nullptr, nullptr, &tempSwapChain);
 
 	if (FAILED(hr))
 	{
@@ -836,20 +837,24 @@ TerrainApp::TerrainApp()
 
 	CD3DX12_RESOURCE_DESC RTreadbackBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(RTreadbackBufferSize);
 
-	hr = m_device->CreateCommittedResource(
-		&readbackHeapProps,
-		D3D12_HEAP_FLAG_NONE,
-		&RTreadbackBufferDesc,
-		D3D12_RESOURCE_STATE_COPY_DEST,
-		nullptr,
-		IID_PPV_ARGS(&m_VTpagesRequestReadBackBuffer));
-
-	if (FAILED(hr))
+	for (int i = 0; i < FRAMES_IN_FLIGHT; ++i)
 	{
-		return;
-	}
+		hr = m_device->CreateCommittedResource(
+			&readbackHeapProps,
+			D3D12_HEAP_FLAG_NONE,
+			&RTreadbackBufferDesc,
+			D3D12_RESOURCE_STATE_COPY_DEST,
+			nullptr,
+			IID_PPV_ARGS(&m_VTpagesRequestReadBackBuffer[i]));
 
-	m_VTpagesRequestReadBackBuffer->SetName(L"VT Page Request Readback Buffer");
+		if (FAILED(hr))
+		{
+			return;
+		}
+
+		std::wstring bufferName = L"VT Page Request Readback Buffer [" + std::to_wstring(i) + L"]";
+		m_VTpagesRequestReadBackBuffer[i]->SetName(bufferName.c_str());
+	}
 
 	CD3DX12_RESOURCE_BARRIER RTbarriers[1];
 
@@ -914,10 +919,10 @@ TerrainApp::TerrainApp()
 
 	m_commandList->Close();
 	ID3D12CommandList* ppCommandLists[] = { m_commandList };
-	m_commandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
+	m_graphicsCommandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
 
 	m_fenceValues[m_frameIndex]++;
-	hr = m_commandQueue->Signal(m_fences[m_frameIndex], m_fenceValues[m_frameIndex]);
+	hr = m_graphicsCommandQueue->Signal(m_fences[m_frameIndex], m_fenceValues[m_frameIndex]);
 
 	if (FAILED(hr))
 	{
@@ -996,7 +1001,7 @@ TerrainApp::~TerrainApp()
 	for (int i = 0; i < FRAMES_IN_FLIGHT; ++i)
 	{
 		const UINT64 fenceToWaitFor = m_fenceValues[i];
-		m_commandQueue->Signal(m_fences[i], fenceToWaitFor);
+		m_graphicsCommandQueue->Signal(m_fences[i], fenceToWaitFor);
 
 		if (m_fences[i]->GetCompletedValue() < fenceToWaitFor)
 		{
@@ -1019,8 +1024,8 @@ TerrainApp::~TerrainApp()
 	if (m_swapChain)
 		m_swapChain->Release();
 
-	if (m_commandQueue)
-		m_commandQueue->Release();
+	if (m_graphicsCommandQueue)
+		m_graphicsCommandQueue->Release();
 
 	if (m_rtvDescriptorHeap)
 		m_rtvDescriptorHeap->Release();
@@ -1044,6 +1049,9 @@ TerrainApp::~TerrainApp()
 
 		if (m_fences[i])
 			m_fences[i]->Release();
+
+		if (m_VTpagesRequestReadBackBuffer[i])
+			m_VTpagesRequestReadBackBuffer[i]->Release();
 	};
 
 	m_albedoTexture.Release();
@@ -1054,9 +1062,6 @@ TerrainApp::~TerrainApp()
 
 	if (m_heightmapReadbackBuffer)
 		m_heightmapReadbackBuffer->Release();
-
-	if (m_VTpagesRequestReadBackBuffer)
-		m_VTpagesRequestReadBackBuffer->Release();
 
 	if (m_computePipelineState)
 		m_computePipelineState->Release();
@@ -1188,8 +1193,7 @@ void TerrainApp::Run()
 		m_commandList->DrawIndexedInstanced(m_indexCount, 1, 0, 0, 0);
 
 		{
-			// TODO async page request WIP
-			OPTICK_EVENT("Readback VT Page Requests");
+			OPTICK_EVENT("Copy VT Page Requests to Readback");
 
 			CD3DX12_RESOURCE_BARRIER srvToCopyBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
 				m_renderTexture.resource,
@@ -1207,7 +1211,7 @@ void TerrainApp::Run()
 			rtSrcLocation.SubresourceIndex = 0;
 
 			D3D12_TEXTURE_COPY_LOCATION rtDstLocation = {};
-			rtDstLocation.pResource = m_VTpagesRequestReadBackBuffer;
+			rtDstLocation.pResource = m_VTpagesRequestReadBackBuffer[m_frameIndex];
 			rtDstLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
 			rtDstLocation.PlacedFootprint.Offset = 0;
 			rtDstLocation.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -1224,7 +1228,7 @@ void TerrainApp::Run()
 				D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 			m_commandList->ResourceBarrier(1, &copyToSrvBarrier);
 
-			m_checkVTpagesRequestAfterFrame = true;
+			m_hasVTpageRequestPending[m_frameIndex] = true;
 		}
 
 		{
@@ -1634,9 +1638,9 @@ void TerrainApp::Run()
 
 		ID3D12CommandList* ppCommandLists[] = { m_commandList };
 
-		m_commandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
+		m_graphicsCommandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
 
-		hr = m_commandQueue->Signal(m_fences[m_frameIndex], m_fenceValues[m_frameIndex]);
+		hr = m_graphicsCommandQueue->Signal(m_fences[m_frameIndex], m_fenceValues[m_frameIndex]);
 
 		if (FAILED(hr))
 		{
@@ -1663,18 +1667,13 @@ void TerrainApp::Run()
 			m_saveHeightmapAfterFrame = false;
 		}
 
-		if (m_checkVTpagesRequestAfterFrame)
+		// readback from FRAMES_IN_FLIGHT frames ago (used m_frameIndex)
+		if (m_hasVTpageRequestPending[m_frameIndex])
 		{
-			if (m_fences[m_frameIndex]->GetCompletedValue() < m_fenceValues[m_frameIndex])
-			{
-				m_fences[m_frameIndex]->SetEventOnCompletion(m_fenceValues[m_frameIndex], m_fenceEvent);
-				WaitForSingleObject(m_fenceEvent, INFINITE);
-			}
-
 			if (m_VTpagesRequestResult.loadedPages.size() < 256)
 				BuildVTPageRequestResult();
 
-			m_checkVTpagesRequestAfterFrame = false;
+			m_hasVTpageRequestPending[m_frameIndex] = false;
 		}
 	}
 }
@@ -1692,7 +1691,7 @@ void TerrainApp::OnWindowResize(int width, int height)
 	for (int i = 0; i < FRAMES_IN_FLIGHT; ++i)
 	{
 		const UINT64 fenceToWaitFor = m_fenceValues[i];
-		m_commandQueue->Signal(m_fences[i], fenceToWaitFor);
+		m_graphicsCommandQueue->Signal(m_fences[i], fenceToWaitFor);
 
 		if (m_fences[i]->GetCompletedValue() < fenceToWaitFor)
 		{
@@ -1813,8 +1812,11 @@ void TerrainApp::OnWindowResize(int width, int height)
 		m_renderTexture.CreateSRV(m_device, renderTextureSrvHandle);
 	}
 
-	if (m_VTpagesRequestReadBackBuffer)
-		m_VTpagesRequestReadBackBuffer->Release();
+	for (int i = 0; i < FRAMES_IN_FLIGHT; ++i)
+	{
+		if (m_VTpagesRequestReadBackBuffer[i])
+			m_VTpagesRequestReadBackBuffer[i]->Release();
+	}
 
 	D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint;
 	UINT64 RTreadbackBufferSize;
@@ -1823,20 +1825,24 @@ void TerrainApp::OnWindowResize(int width, int height)
 	CD3DX12_RESOURCE_DESC RTreadbackBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(RTreadbackBufferSize);
 	CD3DX12_HEAP_PROPERTIES readbackHeapProps(D3D12_HEAP_TYPE_READBACK);
 
-	hr = m_device->CreateCommittedResource(
-		&readbackHeapProps,
-		D3D12_HEAP_FLAG_NONE,
-		&RTreadbackBufferDesc,
-		D3D12_RESOURCE_STATE_COPY_DEST,
-		nullptr,
-		IID_PPV_ARGS(&m_VTpagesRequestReadBackBuffer));
-
-	if (FAILED(hr))
+	for (int i = 0; i < FRAMES_IN_FLIGHT; ++i)
 	{
-		return;
-	}
+		hr = m_device->CreateCommittedResource(
+			&readbackHeapProps,
+			D3D12_HEAP_FLAG_NONE,
+			&RTreadbackBufferDesc,
+			D3D12_RESOURCE_STATE_COPY_DEST,
+			nullptr,
+			IID_PPV_ARGS(&m_VTpagesRequestReadBackBuffer[i]));
 
-	m_VTpagesRequestReadBackBuffer->SetName(L"VT Page Request Readback Buffer");
+		if (FAILED(hr))
+		{
+			return;
+		}
+
+		std::wstring bufferName = L"VT Page Request Readback Buffer [" + std::to_wstring(i) + L"]";
+		m_VTpagesRequestReadBackBuffer[i]->SetName(bufferName.c_str());
+	}
 
 	// ------------------------------------------------ Resize VP & Update Camera ------------------------------------------------
 
@@ -2024,7 +2030,7 @@ void TerrainApp::BuildVTPageRequestResult()
 
 	void* pData = nullptr;
 	D3D12_RANGE readRange = { 0, RTreadbackBufferSize };
-	HRESULT hr = m_VTpagesRequestReadBackBuffer->Map(0, &readRange, &pData);
+	HRESULT hr = m_VTpagesRequestReadBackBuffer[m_frameIndex]->Map(0, &readRange, &pData);
 
 	if (FAILED(hr))
 	{
@@ -2079,7 +2085,7 @@ void TerrainApp::BuildVTPageRequestResult()
 	}
 
 	D3D12_RANGE writeRange = { 0, 0 };
-	m_VTpagesRequestReadBackBuffer->Unmap(0, &writeRange);
+	m_VTpagesRequestReadBackBuffer[m_frameIndex]->Unmap(0, &writeRange);
 
 	/*for (const auto& coord : m_VTpagesRequestResult.requestedPages) {
 		std::cout << "Requested Page Coords : (" << coord.first << ", " << coord.second << ")" << std::endl;
