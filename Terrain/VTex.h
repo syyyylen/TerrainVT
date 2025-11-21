@@ -11,7 +11,7 @@ struct VTexHeader
 	uint32_t tilesX;         // Number of tiles horizontally
 	uint32_t tilesY;         // Number of tiles vertically
 	uint32_t bytesPerPixel;  // Bytes per pixel (4 for RGBA8)
-	uint32_t padding;        // Reserved for future use
+	uint32_t mipLevels;      // Number of mip levels
 };
 
 struct VTexTileEntry
@@ -25,5 +25,5 @@ class VTex
 public:
 	static void ConvertToVTex(const std::string& path, int tileSize = 256);
 	static bool LoadHeader(const std::string& vtexPath, VTexHeader& outHeader);
-	static bool LoadTile(const std::string& vtexPath, int tileX, int tileY, std::vector<char>& outData);
+	static bool LoadTile(const std::string& vtexPath, int tileX, int tileY, uint32_t mipLevel, std::vector<char>& outData);
 };

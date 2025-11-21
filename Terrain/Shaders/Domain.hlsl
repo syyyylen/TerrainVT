@@ -36,7 +36,7 @@ cbuffer ConstantBuffer : register(b0)
 Texture2D heightMap : register(t1);
 SamplerState samplerState : register(s0);
 
-#define HEIGHT_MODIF 0
+#define HEIGHT_MODIF 1
 
 [domain("tri")]
 DSOutput main(HSConstantOutput input, float3 bary : SV_DomainLocation, const OutputPatch<HSOutput, 3> patch)
@@ -47,7 +47,7 @@ DSOutput main(HSConstantOutput input, float3 bary : SV_DomainLocation, const Out
     
     output.uv = patch[0].uv * bary.x + patch[1].uv * bary.y + patch[2].uv * bary.z;
     
-#if NO_HEIGHT_MODIF
+#if HEIGHT_MODIF
     
     // TODO ugly branch here
     // TODO use define and hot reolad shader

@@ -1388,7 +1388,7 @@ void TerrainApp::Run()
 						m_VTpagesRequestResult.uploadHeaps[i]->Release();
 
 					std::vector<char> texTileData;
-					if (VTex::LoadTile(vtexPath, coords.first, coords.second, texTileData))
+					if (VTex::LoadTile(vtexPath, coords.first, coords.second, 0, texTileData))
 					{
 						D3D12_RESOURCE_DESC textureDesc = {};
 						textureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -1737,6 +1737,7 @@ void TerrainApp::Run()
 					int capturedFrameIndex = m_frameIndex;
 					m_buildVTResultFuture = std::async(std::launch::async, [this, capturedFrameIndex]
 					{
+							OPTICK_THREAD("Async VT Page Request Task");
 						BuildVTPageRequestResult(capturedFrameIndex);
 					});
 				}

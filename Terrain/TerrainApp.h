@@ -180,7 +180,7 @@ private:
 	Texture m_VTMainMemoryTexture = {};
 	Texture m_VTPageTableTexture = {};
 
-	Texture m_renderTexture = {};
+	Texture m_renderTexture = {}; // TODO resolution / 2 this texture
 	Texture m_albedoTexture = {};
 	Texture m_computeOutputTexture = {};
 	Texture m_bakedHeightmapTexture = {};
