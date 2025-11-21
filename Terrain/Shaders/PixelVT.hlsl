@@ -24,6 +24,18 @@ float4 main(DSOutput input) : SV_TARGET
     float2 rqPx = floor(input.uv * vt_texture_size);
     float2 rqPage = floor(rqPx / vt_texture_page_size);
     float pagetableSize = vt_texture_size / vt_texture_page_size;
+    
+    float maxMiplevel = log2(vt_texture_size / vt_texture_page_size);
+    
+    float vtWidthRatio = 1.0f; // (vt width / final render pass width) ratio, for now both passes have the same size & resolution
+    float vtHeightRatio = 1.0f; // same for height for now
+    float2 dx = ddx(input.uv * vt_texture_size) * vtWidthRatio;
+    float2 dy = ddy(input.uv * vt_texture_size) * vtHeightRatio;
 
-    return float4(rqPage / (pagetableSize - 1), 0.0f, 1.0f);
+    float d = max(dot(dx, dx), dot(dy, dy));
+    float mip = 0.5f * log2(d);
+    mip = clamp(mip, 0.f, maxMiplevel); // between 0-N mips levels
+    mip /= 255.0f; // back to 0-1 range
+    
+    return float4(rqPage / (pagetableSize - 1), mip, 1.0f);
 }
