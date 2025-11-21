@@ -71,9 +71,23 @@ private:
 		}
 	};
 
+	struct VTPageRequest 
+	{
+		std::pair<int, int> requestedCoords;
+		int requestedMipMapLevel;
+
+		bool operator<(const VTPageRequest& other) const 
+		{
+			if (requestedMipMapLevel != other.requestedMipMapLevel)
+				return requestedMipMapLevel < other.requestedMipMapLevel;
+
+			return requestedCoords < other.requestedCoords;
+		}
+	};
+
 	struct VTPageRequestResult 
 	{
-		std::set<std::pair<int, int>> requestedPages;
+		std::set<VTPageRequest> requestedPages;
 		ID3D12Resource* uploadHeaps[1000]; // TODO this is bad, just for debugging if it works
 		std::set<VTPage> loadedPages;
 		ID3D12Resource* pageTableUploadHeap;

@@ -1368,7 +1368,8 @@ void TerrainApp::Run()
 				int i = 0;
 				for (auto it = m_VTpagesRequestResult.requestedPages.begin(); it != m_VTpagesRequestResult.requestedPages.end(); ++it, ++i)
 				{
-					auto coords = *it;
+					auto pageRequest = *it;
+					auto coords = pageRequest.requestedCoords;
 
 					bool alreadyLoadedPage = false;
 					for (const auto& loadedPage : m_VTpagesRequestResult.loadedPages)
@@ -1388,7 +1389,7 @@ void TerrainApp::Run()
 						m_VTpagesRequestResult.uploadHeaps[i]->Release();
 
 					std::vector<char> texTileData;
-					if (VTex::LoadTile(vtexPath, coords.first, coords.second, 0, texTileData))
+					if (VTex::LoadTile(vtexPath, coords.first, coords.second, pageRequest.requestedMipMapLevel, texTileData))
 					{
 						D3D12_RESOURCE_DESC textureDesc = {};
 						textureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -2198,7 +2199,7 @@ void TerrainApp::BuildVTPageRequestResult(int frameIndex)
 #if USE_TEST_VTEX
 	pagetableTextureSize = 16 / 4;
 #else
-	pagetableTextureSize = 4096 / 256;
+	pagetableTextureSize = 4096 / 256; // TODO depends of mip level
 #endif
 
 	for (UINT y = 0; y < height; ++y)
@@ -2218,8 +2219,13 @@ void TerrainApp::BuildVTPageRequestResult(int frameIndex)
 			{
 				int coordX = floor(((float)r / 255.0f) * (pagetableTextureSize - 1));
 				int coordY = floor(((float)g / 255.0f) * (pagetableTextureSize - 1));
+				int mip = b;
 
-				m_VTpagesRequestResult.requestedPages.insert({ coordX, coordY });
+				VTPageRequest pageRequest;
+				pageRequest.requestedCoords = { coordX, coordY };
+				pageRequest.requestedMipMapLevel = mip;
+
+				m_VTpagesRequestResult.requestedPages.insert(pageRequest);
 			}
 
 			/*std::cout << "VT Page Request : "
