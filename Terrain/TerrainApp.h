@@ -5,6 +5,7 @@
 #include <condition_variable>
 #include <atomic>
 #include <functional>
+#include <future>
 #include "Camera.h"
 #include "Texture.h"
 #include "ShaderCompiler.h"
@@ -34,7 +35,7 @@ private:
 
 	void BakeHeightMap();
 	void SaveHeightmapToPNG(const std::string& filepath);
-	void BuildVTPageRequestResult();
+	void BuildVTPageRequestResult(int frameIndex);
 
 	// ------------------------ Render Data Structures ------------------------
 
@@ -174,6 +175,8 @@ private:
 	ID3D12Resource* m_VTpagesRequestReadBackBuffer[FRAMES_IN_FLIGHT] = {};
 	VTPageRequestResult m_VTpagesRequestResult = {};
 	bool m_hasVTpageRequestPending[FRAMES_IN_FLIGHT] = {};
+	std::atomic<bool> m_buildVTResultInProgress{false};
+	std::future<void> m_buildVTResultFuture;
 	Texture m_VTMainMemoryTexture = {};
 	Texture m_VTPageTableTexture = {};
 

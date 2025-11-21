@@ -1305,6 +1305,7 @@ void TerrainApp::Run()
 		m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
 		m_commandList->DrawIndexedInstanced(m_indexCount, 1, 0, 0, 0);
 
+		if (!m_buildVTResultInProgress.load(std::memory_order_acquire))
 		{
 			OPTICK_EVENT("Copy VT Page Requests to Readback");
 
@@ -1344,6 +1345,7 @@ void TerrainApp::Run()
 			m_hasVTpageRequestPending[m_frameIndex] = true;
 		}
 
+		if (!m_buildVTResultInProgress.load(std::memory_order_acquire))
 		{
 			OPTICK_EVENT("Load VT Pages In VRAM");
 
@@ -1723,8 +1725,22 @@ void TerrainApp::Run()
 		// readback from FRAMES_IN_FLIGHT frames ago (used m_frameIndex)
 		if (m_hasVTpageRequestPending[m_frameIndex])
 		{
-			if (m_VTpagesRequestResult.loadedPages.size() < 256)
-				BuildVTPageRequestResult();
+			if (m_VTpagesRequestResult.loadedPages.size() < 256) // TODO remove this
+			{
+				if (m_buildVTResultFuture.valid() && m_buildVTResultFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+					m_buildVTResultFuture.get();
+
+				if (!m_buildVTResultInProgress.load(std::memory_order_acquire))
+				{
+					m_buildVTResultInProgress.store(true, std::memory_order_release);
+
+					int capturedFrameIndex = m_frameIndex;
+					m_buildVTResultFuture = std::async(std::launch::async, [this, capturedFrameIndex]
+					{
+						BuildVTPageRequestResult(capturedFrameIndex);
+					});
+				}
+			}
 
 			m_hasVTpageRequestPending[m_frameIndex] = false;
 		}
@@ -2148,7 +2164,7 @@ void TerrainApp::SaveHeightmapToPNG(const std::string& filepath)
 
 // ------------------------------------------------ VT Pages Request Readback ------------------------------------------------
 
-void TerrainApp::BuildVTPageRequestResult()
+void TerrainApp::BuildVTPageRequestResult(int frameIndex)
 {
 	OPTICK_EVENT("Build VT Page Request Results");
 
@@ -2158,11 +2174,12 @@ void TerrainApp::BuildVTPageRequestResult()
 
 	void* pData = nullptr;
 	D3D12_RANGE readRange = { 0, RTreadbackBufferSize };
-	HRESULT hr = m_VTpagesRequestReadBackBuffer[m_frameIndex]->Map(0, &readRange, &pData);
+	HRESULT hr = m_VTpagesRequestReadBackBuffer[frameIndex]->Map(0, &readRange, &pData);
 
 	if (FAILED(hr))
 	{
 		std::cout << "Failed to map readback buffer for VT pages request" << std::endl;
+		m_buildVTResultInProgress.store(false, std::memory_order_release);
 		return;
 	}
 
@@ -2213,7 +2230,9 @@ void TerrainApp::BuildVTPageRequestResult()
 	}
 
 	D3D12_RANGE writeRange = { 0, 0 };
-	m_VTpagesRequestReadBackBuffer[m_frameIndex]->Unmap(0, &writeRange);
+	m_VTpagesRequestReadBackBuffer[frameIndex]->Unmap(0, &writeRange);
+
+	m_buildVTResultInProgress.store(false, std::memory_order_release);
 
 	/*for (const auto& coord : m_VTpagesRequestResult.requestedPages) {
 		std::cout << "Requested Page Coords : (" << coord.first << ", " << coord.second << ")" << std::endl;
