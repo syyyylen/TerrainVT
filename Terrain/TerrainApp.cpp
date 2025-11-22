@@ -978,15 +978,8 @@ TerrainApp::TerrainApp()
 
 	// ------------------------------------------------ VT Textures ------------------------------------------------
 
-	int vtMainMemoryTextureSize;
-	int pagetableTextureSize;
-#if USE_TEST_VTEX
-	vtMainMemoryTextureSize = 16;
-	pagetableTextureSize = 16 / 4;
-#else
-	vtMainMemoryTextureSize = 4096;
-	pagetableTextureSize = 4096 / 256;
-#endif
+	int vtMainMemoryTextureSize = 4096;
+	int pagetableTextureSize = 4096 / 256;
 
 	m_VTMainMemoryTexture.CreateEmpty(
 		m_device,
@@ -1072,13 +1065,8 @@ TerrainApp::TerrainApp()
 	m_constantBuffer.noise_octaves = 5;
 	m_constantBuffer.runtime_noise = m_runtimeNoiseAtStart;
 
-#if USE_TEST_VTEX
-	m_constantBuffer.vt_texture_size = 16;
-	m_constantBuffer.vt_texture_page_size = 4;
-#else
 	m_constantBuffer.vt_texture_size = 4096;
 	m_constantBuffer.vt_texture_page_size = 256;
-#endif
 
 #if ENABLE_IMGUI
 
@@ -1349,12 +1337,7 @@ void TerrainApp::Run()
 		{
 			OPTICK_EVENT("Load VT Pages In VRAM");
 
-			std::string vtexPath;
-#if USE_TEST_VTEX
-			vtexPath = "Assets/TestVT2.vtex";
-#else
-			vtexPath = "Assets/rocks_albedo.vtex";
-#endif
+			std::string vtexPath = "Assets/rocks_albedo.vtex";
 
 			VTexHeader vTexHeader;
 			if (VTex::LoadHeader(vtexPath, vTexHeader))
@@ -1468,6 +1451,7 @@ void TerrainApp::Run()
 						m_commandList->CopyTextureRegion(&dstLocation, tileX, tileY, 0, &srcLocation, &srcBox);
 
 						VTPage loadedVTPage;
+						loadedVTPage.mipMapLevel = pageRequest.requestedMipMapLevel;
 						loadedVTPage.coords = { coords.first, coords.second };
 						loadedVTPage.physicalCoords = { tileIndexX, tileIndexY }; // in page space, not in px space
 						m_VTpagesRequestResult.loadedPages.insert(loadedVTPage);
@@ -1610,23 +1594,14 @@ void TerrainApp::Run()
 		{
 			OPTICK_EVENT("Convert Tex to VTex");
 
-#if USE_TEST_VTEX
-			VTex::ConvertToVTex("Assets/TestVT2.png", 4 /* 4x4 tiles for testing */);
-			VTex::ConvertToVTex("../../../../Terrain/Assets/TestVT2.png", 4 /* 4x4 tiles for testing */);
-#else
 			VTex::ConvertToVTex("Assets/rocks_albedo.png", 256);
 			VTex::ConvertToVTex("../../../../Terrain/Assets/rocks_albedo.png", 256);
-#endif
 		}
 
 		if (ImGui::Button("Test read VTex"))
 		{
 			VTexHeader vTexHeader;
-#if USE_TEST_VTEX
-			VTex::LoadHeader("Assets/TestVT2.vtex", vTexHeader);
-#else
 			VTex::LoadHeader("Assets/rocks_albedo.vtex", vTexHeader);
-#endif
 
 			std::cout << "Loaded VTex : " << vTexHeader.height << " height, " << vTexHeader.width << " width, " << vTexHeader.bytesPerPixel << " bytes per pixel" << std::endl;
 		}
@@ -2195,31 +2170,26 @@ void TerrainApp::BuildVTPageRequestResult(int frameIndex)
 
 	m_VTpagesRequestResult.requestedPages.clear();
 
-	int pagetableTextureSize;
-#if USE_TEST_VTEX
-	pagetableTextureSize = 16 / 4;
-#else
-	pagetableTextureSize = 4096 / 256; // TODO depends of mip level
-#endif
-
 	for (UINT y = 0; y < height; ++y)
 	{
 		uint8_t* pRow = pByteData + (y * rowPitch);
 
 		for (UINT x = 0; x < width; ++x)
 		{
-			uint8_t* pPixel = pRow + (x * pagetableTextureSize);
+			uint8_t* pPixel = pRow + (x * 4); // 4 bytes for RGBA
 
-			uint8_t r = pPixel[0];
+			uint8_t r = pPixel[0]; // CLAUDE : here I get 36
 			uint8_t g = pPixel[1];
 			uint8_t b = pPixel[2];
 			uint8_t a = pPixel[3];
 
 			if (a > 0) // Alpha channel : something was rendered here and needs a texture page
 			{
-				int coordX = floor(((float)r / 255.0f) * (pagetableTextureSize - 1));
-				int coordY = floor(((float)g / 255.0f) * (pagetableTextureSize - 1));
 				int mip = b;
+				int pagetableTextureSize = (4096 / std::exp2(mip)) / 256;
+
+				int coordX = (int)round(((float)r / 255.0f) * pagetableTextureSize);
+				int coordY = (int)round(((float)g / 255.0f) * pagetableTextureSize);
 
 				VTPageRequest pageRequest;
 				pageRequest.requestedCoords = { coordX, coordY };
@@ -2241,8 +2211,9 @@ void TerrainApp::BuildVTPageRequestResult(int frameIndex)
 
 	m_buildVTResultInProgress.store(false, std::memory_order_release);
 
-	/*for (const auto& coord : m_VTpagesRequestResult.requestedPages) {
-		std::cout << "Requested Page Coords : (" << coord.first << ", " << coord.second << ")" << std::endl;
+	/*for (const auto& rqPage : m_VTpagesRequestResult.requestedPages) 
+	{
+		std::cout << "Request Page :(" << rqPage.requestedCoords.first << "," << rqPage.requestedCoords.second << ") at mip level : " << rqPage.requestedMipMapLevel << std::endl;
 	}
 
 	std::cout << "------------------------------------" << std::endl;*/

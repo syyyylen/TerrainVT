@@ -15,8 +15,6 @@
 
 #define ENABLE_IMGUI 1
 
-#define USE_TEST_VTEX 0
-
 class TerrainApp 
 {
 public:
@@ -62,6 +60,7 @@ private:
 
 	struct VTPage
 	{
+		int mipMapLevel;
 		std::pair<int, int> coords; // virtual coords in the source texture VTex (in page space)
 		std::pair <UINT, UINT> physicalCoords; // physical coords in the gpu texture (in page/tile space, not pixel space)
 
