@@ -27,34 +27,47 @@ cbuffer ConstantBuffer : register(b0)
 float4 main(DSOutput input) : SV_TARGET
 {
     float3 finalColor = float3(0.0f, 0.0f, 0.0f);
+
+    float2 dx = ddx(input.uv * vt_texture_size);
+    float2 dy = ddy(input.uv * vt_texture_size);
+    float d = max(dot(dx, dx), dot(dy, dy));
+    float mip = 0.5f * log2(d);
+
+    float maxMipLevel = log2(vt_texture_size / vt_texture_page_size);
+    mip = clamp(mip, 0.0f, maxMipLevel);
     
-    float2 rqPx = floor(input.uv * vt_texture_size);
+    mip = 2.0f; // TODO debugging, remove that
+    
+    int mipTextureSize = vt_texture_size >> int(mip); // divide by 2^mip
+    int pagetableSize = mipTextureSize / vt_texture_page_size;
+
+    float2 rqPx = floor(input.uv * mipTextureSize);
     float2 rqPage = floor(rqPx / vt_texture_page_size);
-    float pagetableSize = vt_texture_size / vt_texture_page_size;
     float2 rqPageUV = rqPage / (pagetableSize - 1);
-    
-    float4 pagetableSample = vtPagetable.Sample(s1, rqPageUV);
+
+    float4 pagetableSample = vtPagetable.SampleLevel(s1, rqPageUV, mip);
     if (pagetableSample.a > 0.0f)
     {
-        float2 pageAdress = pagetableSample.rg * 255.0f * vt_texture_page_size; // page physical address (tile index * tile size = pixel coords)
- 
+        // page physical address (tile index * tile size = pixel coords)
+        float2 pageAdress = pagetableSample.rg * 255.0f * vt_texture_page_size;
+
         float2 rest = frac(rqPx / vt_texture_page_size);
         rest = rest * vt_texture_page_size;
-        
+
         float2 pxAdress = pageAdress + rest; // px physical adress
- 
+
         float2 pxUVcoords = pxAdress / vt_texture_size; // back to 0-1 range
-        
+
         float4 vTexColor = vtTexture.Sample(s1, pxUVcoords);
- 
+
         if (vTexColor.a > 0.0f)
         {
             finalColor = vTexColor.rgb;
         }
     }
-    
+
     return float4(finalColor, 1.0f);
-    
+
     // return float4(input.uv, 0.0f, 1.0f);
     // float3 finalColor = diffuseTexture.Sample(s1, input.uv).rgb;
     // return float4(finalColor, 1.0f);

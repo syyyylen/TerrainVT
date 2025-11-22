@@ -29,10 +29,10 @@ float4 main(DSOutput input) : SV_TARGET
     float d = max(dot(dx, dx), dot(dy, dy));
     float mip = 0.5f * log2(d);
     
+    mip = 2.0f; // TODO debugging, remove that
+    
     float maxMiplevel = log2(vt_texture_size / vt_texture_page_size);
     mip = clamp(mip, 0.f, maxMiplevel); // between 0-N mips levels
-    
-    mip = 1.0f; // TODO For debug, remove this
     
     float2 rqPx = floor(input.uv * vt_texture_size) / exp2(mip);
     float2 rqPage = floor(rqPx / vt_texture_page_size);

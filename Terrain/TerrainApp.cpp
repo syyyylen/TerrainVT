@@ -989,13 +989,18 @@ TerrainApp::TerrainApp()
 		D3D12_RESOURCE_FLAG_NONE,
 		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
+	// Calculate mip levels for page table: each mip halves the page table size
+	// Base: 16x16, Mip1: 8x8, Mip2: 4x4, etc. down to 1x1
+	UINT pageTableMipLevels = static_cast<UINT>(std::floor(std::log2(pagetableTextureSize))) + 1;
+
 	m_VTPageTableTexture.CreateEmpty(
 		m_device,
 		pagetableTextureSize,
 		pagetableTextureSize,
 		DXGI_FORMAT_R8G8B8A8_UNORM,
 		D3D12_RESOURCE_FLAG_NONE,
-		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+		pageTableMipLevels);
 
 	for (int i = 0; i < FRAMES_IN_FLIGHT; ++i)
 	{
@@ -1464,31 +1469,56 @@ void TerrainApp::Run()
 					D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 				m_commandList->ResourceBarrier(1, &copyToSrvBarrier);
 
-				// Update pagetable : stores physical adress at virtual adresses locations
-				// test vtex 16px 4px pages 16/4 => needs 4*4 pagetable
-				// 4096px 256px pages 4096/256 => needs 16*16 pagetable
-
-				int pagetableSize = m_constantBuffer.vt_texture_size / m_constantBuffer.vt_texture_page_size;
+				// update pagetable: stores physical adress at virtual adresses locations
+				// store a pagetable for each mip level in the corresponding mip of m_VTPageTableTexture
 
 				if (m_VTpagesRequestResult.pageTableUploadHeap)
 					m_VTpagesRequestResult.pageTableUploadHeap->Release();
 
-				std::vector<UINT32> pageTableData(pagetableSize * pagetableSize, 0);
+				std::map<int, std::vector<VTPage>> pagesByMipLevel;
 				for (const VTPage& page : m_VTpagesRequestResult.loadedPages)
 				{
-					int virtualX = page.coords.first;
-					int virtualY = page.coords.second;
-					UINT physicalX = page.physicalCoords.first;
-					UINT physicalY = page.physicalCoords.second;
-
-					int index = virtualY * pagetableSize + virtualX;
-
-					pageTableData[index] = (physicalX & 0xFF) | ((physicalY & 0xFF) << 8) | (0xFF << 24); // Pack: R=physicalX, G=physicalY, B=0, A=255
+					pagesByMipLevel[page.mipMapLevel].push_back(page);
 				}
 
-				UINT64 uploadBufferSize;
-				D3D12_PLACED_SUBRESOURCE_FOOTPRINT vtPagetableFootprint;
-				m_VTPageTableTexture.GetFootprint(m_device, vtPagetableFootprint, uploadBufferSize);
+				std::vector<D3D12_SUBRESOURCE_DATA> subresourceData;
+				std::vector<std::vector<UINT32>> pageTableDataPerMip;
+
+				for (int mip = 0; mip < static_cast<int>(m_VTPageTableTexture.mipLevels); ++mip)
+				{
+					int mipTextureSize = m_constantBuffer.vt_texture_size >> mip; // divide by 2^mip
+					int pagetableSizeForMip = mipTextureSize / m_constantBuffer.vt_texture_page_size;
+
+					std::vector<UINT32> pageTableData(pagetableSizeForMip * pagetableSizeForMip, 0);
+
+					if (pagesByMipLevel.find(mip) != pagesByMipLevel.end())
+					{
+						for (const VTPage& page : pagesByMipLevel[mip])
+						{
+							int virtualX = page.coords.first;
+							int virtualY = page.coords.second;
+							UINT physicalX = page.physicalCoords.first;
+							UINT physicalY = page.physicalCoords.second;
+
+							int index = virtualY * pagetableSizeForMip + virtualX;
+
+							pageTableData[index] = (physicalX & 0xFF) | ((physicalY & 0xFF) << 8) | (0xFF << 24); // R=physicalX, G=physicalY, B=0, A=255
+						}
+					}
+
+					pageTableDataPerMip.push_back(std::move(pageTableData));
+
+					D3D12_SUBRESOURCE_DATA subresource = {};
+					subresource.pData = pageTableDataPerMip.back().data();
+					subresource.RowPitch = pagetableSizeForMip * 4; // N pixels * 4 bytes per pixel
+					subresource.SlicePitch = pagetableSizeForMip * pagetableSizeForMip * 4;
+					subresourceData.push_back(subresource);
+				}
+
+				UINT64 uploadBufferSize = GetRequiredIntermediateSize( 
+					m_VTPageTableTexture.resource,
+					0,
+					m_VTPageTableTexture.mipLevels);
 
 				CD3DX12_HEAP_PROPERTIES heapPropUpload(D3D12_HEAP_TYPE_UPLOAD);
 				CD3DX12_RESOURCE_DESC uploadBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(uploadBufferSize);
@@ -1501,11 +1531,6 @@ void TerrainApp::Run()
 					nullptr,
 					IID_PPV_ARGS(&m_VTpagesRequestResult.pageTableUploadHeap));
 
-				D3D12_SUBRESOURCE_DATA textureData = {};
-				textureData.pData = pageTableData.data();
-				textureData.RowPitch = pagetableSize * 4; // N pixels * 4 bytes per pixel
-				textureData.SlicePitch = pagetableSize * pagetableSize * 4; // NxN texture * 4 bytes per pixel
-
 				CD3DX12_RESOURCE_BARRIER pageTableToCopyDestBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
 					m_VTPageTableTexture.resource,
 					D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
@@ -1515,8 +1540,10 @@ void TerrainApp::Run()
 				UpdateSubresources(m_commandList,
 					m_VTPageTableTexture.resource,
 					m_VTpagesRequestResult.pageTableUploadHeap,
-					0, 0, 1,
-					&textureData);
+					0,
+					0,
+					m_VTPageTableTexture.mipLevels,
+					subresourceData.data());
 
 				CD3DX12_RESOURCE_BARRIER pageTableToSrvBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
 					m_VTPageTableTexture.resource,
@@ -2178,7 +2205,7 @@ void TerrainApp::BuildVTPageRequestResult(int frameIndex)
 		{
 			uint8_t* pPixel = pRow + (x * 4); // 4 bytes for RGBA
 
-			uint8_t r = pPixel[0]; // CLAUDE : here I get 36
+			uint8_t r = pPixel[0];
 			uint8_t g = pPixel[1];
 			uint8_t b = pPixel[2];
 			uint8_t a = pPixel[3];

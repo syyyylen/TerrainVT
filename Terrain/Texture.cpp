@@ -128,11 +128,13 @@ void Texture::CreateEmpty(
     int texHeight,
     DXGI_FORMAT textureFormat,
     D3D12_RESOURCE_FLAGS flags,
-    D3D12_RESOURCE_STATES initialState)
+    D3D12_RESOURCE_STATES initialState,
+    UINT mipCount)
 {
     format = textureFormat;
     width = texWidth;
     height = texHeight;
+    mipLevels = mipCount;
 
     D3D12_RESOURCE_DESC textureDesc = {};
     textureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -140,7 +142,7 @@ void Texture::CreateEmpty(
     textureDesc.Width = width;
     textureDesc.Height = height;
     textureDesc.DepthOrArraySize = 1;
-    textureDesc.MipLevels = 1;
+    textureDesc.MipLevels = mipLevels;
     textureDesc.Format = format;
     textureDesc.SampleDesc.Count = 1;
     textureDesc.SampleDesc.Quality = 0;
@@ -164,7 +166,7 @@ void Texture::CreateSRV(ID3D12Device* device, D3D12_CPU_DESCRIPTOR_HANDLE cpuHan
     srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
     srvDesc.Format = format;
     srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-    srvDesc.Texture2D.MipLevels = 1;
+    srvDesc.Texture2D.MipLevels = mipLevels;
 
     device->CreateShaderResourceView(resource, &srvDesc, cpuHandle);
 }

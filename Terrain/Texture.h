@@ -30,7 +30,8 @@ struct Texture
         int height,
         DXGI_FORMAT textureFormat,
         D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_NONE,
-        D3D12_RESOURCE_STATES initialState = D3D12_RESOURCE_STATE_COPY_DEST);
+        D3D12_RESOURCE_STATES initialState = D3D12_RESOURCE_STATE_COPY_DEST,
+        UINT mipLevels = 1);
 
     void CreateSRV(
         ID3D12Device* device,
@@ -53,4 +54,5 @@ struct Texture
     DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM;
     int width = 0;
     int height = 0;
+    UINT mipLevels = 1;
 };

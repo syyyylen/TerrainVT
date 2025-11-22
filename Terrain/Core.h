@@ -12,5 +12,6 @@
 #include <dxcapi.h>
 #include <fstream>
 #include <algorithm>
+#include <map>
 
 #include "Include/d3dx12.h"
