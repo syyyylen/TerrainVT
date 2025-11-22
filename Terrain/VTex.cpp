@@ -160,6 +160,8 @@ void VTex::ConvertToVTex(const std::string & path, int tileSize)
 
 	std::vector<char> tileBuffer(tileDataSize);
 
+	const bool DEBUG_MIP_COLORS = true;
+
 	for (int mip = 0; mip < mipCount; mip++)
 	{
 		for (int tileY = 0; tileY < mips[mip].tilesY; tileY++)
@@ -177,13 +179,60 @@ void VTex::ConvertToVTex(const std::string & path, int tileSize)
 
 						if (srcX < mips[mip].width && srcY < mips[mip].height)
 						{
-							int srcIndex = (srcY * mips[mip].width + srcX) * bytesPerPixel;
 							int dstIndex = (y * tileSize + x) * bytesPerPixel;
 
-							tileBuffer[dstIndex + 0] = mips[mip].data[srcIndex + 0]; // R
-							tileBuffer[dstIndex + 1] = mips[mip].data[srcIndex + 1]; // G
-							tileBuffer[dstIndex + 2] = mips[mip].data[srcIndex + 2]; // B
-							tileBuffer[dstIndex + 3] = mips[mip].data[srcIndex + 3]; // A
+							if (DEBUG_MIP_COLORS) // TODO Demain remove this
+							{
+								// Mip 0: Original texture (not colored)
+								// Mip 1: Red
+								// Mip 2: Blue
+								// Mip 3: Green
+								// Mip 4+: White
+								if (mip == 0)
+								{
+									int srcIndex = (srcY * mips[mip].width + srcX) * bytesPerPixel;
+									tileBuffer[dstIndex + 0] = mips[mip].data[srcIndex + 0];
+									tileBuffer[dstIndex + 1] = mips[mip].data[srcIndex + 1];
+									tileBuffer[dstIndex + 2] = mips[mip].data[srcIndex + 2];
+									tileBuffer[dstIndex + 3] = mips[mip].data[srcIndex + 3];
+								}
+								else if (mip == 1)
+								{
+									tileBuffer[dstIndex + 0] = (char)255;
+									tileBuffer[dstIndex + 1] = (char)0;
+									tileBuffer[dstIndex + 2] = (char)0;
+									tileBuffer[dstIndex + 3] = (char)255;
+								}
+								else if (mip == 2)
+								{
+									tileBuffer[dstIndex + 0] = (char)0;
+									tileBuffer[dstIndex + 1] = (char)0;
+									tileBuffer[dstIndex + 2] = (char)255;
+									tileBuffer[dstIndex + 3] = (char)255;
+								}
+								else if (mip == 3)
+								{
+									tileBuffer[dstIndex + 0] = (char)0;
+									tileBuffer[dstIndex + 1] = (char)255;
+									tileBuffer[dstIndex + 2] = (char)0;
+									tileBuffer[dstIndex + 3] = (char)255;
+								}
+								else // mip 4+
+								{
+									tileBuffer[dstIndex + 0] = (char)255;
+									tileBuffer[dstIndex + 1] = (char)255;
+									tileBuffer[dstIndex + 2] = (char)255;
+									tileBuffer[dstIndex + 3] = (char)255;
+								}
+							}
+							else
+							{
+								int srcIndex = (srcY * mips[mip].width + srcX) * bytesPerPixel;
+								tileBuffer[dstIndex + 0] = mips[mip].data[srcIndex + 0]; // R
+								tileBuffer[dstIndex + 1] = mips[mip].data[srcIndex + 1]; // G
+								tileBuffer[dstIndex + 2] = mips[mip].data[srcIndex + 2]; // B
+								tileBuffer[dstIndex + 3] = mips[mip].data[srcIndex + 3]; // A
+							}
 						}
 						// else: pixel remains black (padding for out-of-bounds tiles)
 					}

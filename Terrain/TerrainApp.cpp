@@ -969,7 +969,7 @@ TerrainApp::TerrainApp()
 
 	// ------------------------------------------------ VT Textures ------------------------------------------------
 
-	int vtMainMemoryTextureSize = 4096;
+	int vtMainMemoryTextureSize = 4096; // TODO Demain fix vt_texture_size =/= texture and increase size
 	int pagetableTextureSize = 4096 / 256;
 
 	m_VTMainMemoryTexture.CreateEmpty(
@@ -1368,6 +1368,11 @@ void TerrainApp::Run()
 					if (alreadyLoadedPage)
 						continue;
 
+					UINT tilesPerRow = m_VTMainMemoryTexture.width / vTexHeader.tileSize;
+					UINT maxPages = tilesPerRow * tilesPerRow; // 16 * 16 = 256 for 4096x4096 texture with 256x256 pages
+					if (m_VTpagesRequestResult.loadedPages.size() >= maxPages) // TODO remove that and stream pages dynamically
+						continue;
+
 					if (i < 1000 && m_VTpagesRequestResult.uploadHeaps[i])
 						m_VTpagesRequestResult.uploadHeaps[i]->Release();
 
@@ -1722,7 +1727,9 @@ void TerrainApp::Run()
 		// readback from FRAMES_IN_FLIGHT frames ago (used m_frameIndex)
 		if (m_hasVTpageRequestPending[m_frameIndex])
 		{
-			if (m_VTpagesRequestResult.loadedPages.size() < 256) // TODO remove this
+			UINT tilesPerRow = m_VTMainMemoryTexture.width / m_constantBuffer.vt_texture_page_size;
+			UINT maxPages = tilesPerRow * tilesPerRow;
+			if (m_VTpagesRequestResult.loadedPages.size() < maxPages) // TODO remove that and stream pages dynamically
 			{
 				if (m_buildVTResultFuture.valid() && m_buildVTResultFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
 					m_buildVTResultFuture.get();
