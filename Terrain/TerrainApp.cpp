@@ -928,7 +928,7 @@ TerrainApp::TerrainApp()
 		height,
 		DXGI_FORMAT_R8G8B8A8_UNORM,
 		D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET,
-		D3D12_RESOURCE_STATE_RENDER_TARGET);
+		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
 	m_renderTexture.CreateRTV(m_device, rtvHandle /* after frames in flight */);
 
@@ -967,15 +967,6 @@ TerrainApp::TerrainApp()
 		m_VTpagesRequestReadBackBuffer[i]->SetName(bufferName.c_str());
 	}
 
-	CD3DX12_RESOURCE_BARRIER RTbarriers[1];
-
-	RTbarriers[0] = CD3DX12_RESOURCE_BARRIER::Transition(
-		m_renderTexture.resource,
-		D3D12_RESOURCE_STATE_RENDER_TARGET,
-		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-
-	m_commandList->ResourceBarrier(1, RTbarriers);
-
 	// ------------------------------------------------ VT Textures ------------------------------------------------
 
 	int vtMainMemoryTextureSize = 4096;
@@ -989,8 +980,6 @@ TerrainApp::TerrainApp()
 		D3D12_RESOURCE_FLAG_NONE,
 		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
-	// Calculate mip levels for page table: each mip halves the page table size
-	// Base: 16x16, Mip1: 8x8, Mip2: 4x4, etc. down to 1x1
 	UINT pageTableMipLevels = static_cast<UINT>(std::floor(std::log2(pagetableTextureSize))) + 1;
 
 	m_VTPageTableTexture.CreateEmpty(
@@ -1884,7 +1873,7 @@ void TerrainApp::OnWindowResize(int width, int height)
 		height,
 		DXGI_FORMAT_R8G8B8A8_UNORM,
 		D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET,
-		D3D12_RESOURCE_STATE_RENDER_TARGET);
+		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
 	m_renderTexture.CreateRTV(m_device, rtvHandle /* after frames in flight */);
 
