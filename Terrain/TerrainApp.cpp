@@ -1102,6 +1102,12 @@ TerrainApp::TerrainApp()
 
 TerrainApp::~TerrainApp()
 {
+	if (m_buildVTResultFuture.valid())
+	{
+		m_buildVTResultFuture.wait();
+		m_buildVTResultFuture.get();
+	}
+
 	for (int i = 0; i < FRAMES_IN_FLIGHT; ++i)
 	{
 		const UINT64 fenceToWaitFor = m_fenceValues[i];
@@ -1486,8 +1492,7 @@ void TerrainApp::Run()
 
 				for (int mip = 0; mip < static_cast<int>(m_VTPageTableTexture.mipLevels); ++mip)
 				{
-					int mipTextureSize = m_constantBuffer.vt_texture_size >> mip; // divide by 2^mip
-					int pagetableSizeForMip = mipTextureSize / m_constantBuffer.vt_texture_page_size;
+					int pagetableSizeForMip = (m_constantBuffer.vt_texture_size / std::exp2(mip)) / m_constantBuffer.vt_texture_page_size;
 
 					std::vector<UINT32> pageTableData(pagetableSizeForMip * pagetableSizeForMip, 0);
 
@@ -1762,6 +1767,12 @@ void TerrainApp::OnWindowResize(int width, int height)
 {
 	if (!m_isRunning)
 		return;
+
+	if (m_buildVTResultFuture.valid())
+	{
+		m_buildVTResultFuture.wait();
+		m_buildVTResultFuture.get();
+	}
 
 	for (int i = 0; i < FRAMES_IN_FLIGHT; ++i)
 	{
@@ -2213,7 +2224,7 @@ void TerrainApp::BuildVTPageRequestResult(int frameIndex)
 			if (a > 0) // Alpha channel : something was rendered here and needs a texture page
 			{
 				int mip = b;
-				int pagetableTextureSize = (4096 / std::exp2(mip)) / 256;
+				int pagetableTextureSize = (m_constantBuffer.vt_texture_size / std::exp2(mip)) / m_constantBuffer.vt_texture_page_size;
 
 				int coordX = (int)round(((float)r / 255.0f) * pagetableTextureSize);
 				int coordY = (int)round(((float)g / 255.0f) * pagetableTextureSize);

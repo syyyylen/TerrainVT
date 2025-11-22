@@ -36,13 +36,11 @@ float4 main(DSOutput input) : SV_TARGET
     float maxMipLevel = log2(vt_texture_size / vt_texture_page_size);
     mip = clamp(mip, 0.0f, maxMipLevel);
     
-    mip = 2.0f; // TODO debugging, remove that
+    mip = 3.0f; // TODO debugging, remove that
     
-    int mipTextureSize = vt_texture_size >> int(mip); // divide by 2^mip
-    int pagetableSize = mipTextureSize / vt_texture_page_size;
-
-    float2 rqPx = floor(input.uv * mipTextureSize);
+    float2 rqPx = floor(input.uv * vt_texture_size) / exp2(mip);;
     float2 rqPage = floor(rqPx / vt_texture_page_size);
+    float pagetableSize = (vt_texture_size / exp2(mip)) / vt_texture_page_size;
     float2 rqPageUV = rqPage / (pagetableSize - 1);
 
     float4 pagetableSample = vtPagetable.SampleLevel(s1, rqPageUV, mip);
