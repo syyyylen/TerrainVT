@@ -1349,26 +1349,56 @@ void TerrainApp::Run()
 					D3D12_RESOURCE_STATE_COPY_DEST);
 				m_commandList->ResourceBarrier(1, &srvToCopyBarrier);
 
-				int i = 0;
-				for (auto it = m_VTpagesRequestResult.requestedPages.begin(); it != m_VTpagesRequestResult.requestedPages.end(); ++it, ++i)
+				// m_VTpagesRequestResult.requestedPages.clear();
+				/*for (uint32_t mipLevel = 0; mipLevel < vTexHeader.mipLevels; ++mipLevel)
+				{
+					uint32_t mipTilesX = vTexHeader.tilesX >> mipLevel;
+					uint32_t mipTilesY = vTexHeader.tilesY >> mipLevel;
+
+					mipTilesX = std::max(1u, mipTilesX);
+					mipTilesY = std::max(1u, mipTilesY);
+
+					for (uint32_t y = 0; y < mipTilesY; ++y)
+					{
+						for (uint32_t x = 0; x < mipTilesX; ++x)
+						{
+							VTPageRequest pageRequest;
+							pageRequest.requestedCoords = std::make_pair(static_cast<int>(x), static_cast<int>(y));
+							pageRequest.requestedMipMapLevel = static_cast<int>(mipLevel);
+							m_VTpagesRequestResult.requestedPages.insert(pageRequest);
+						}
+					}
+				}*/
+
+				std::set<VTPageRequest> requestedPages;
+				for (auto it = m_VTpagesRequestResult.requestedPages.begin(); it != m_VTpagesRequestResult.requestedPages.end(); ++it)
 				{
 					auto pageRequest = *it;
 					auto coords = pageRequest.requestedCoords;
 					auto mip = pageRequest.requestedMipMapLevel;
 
-					bool alreadyLoadedPage = false;
+					bool pageAlreadyLoaded = false;
 					for (const auto& loadedPage : m_VTpagesRequestResult.loadedPages)
 					{
 						if (loadedPage.mipMapLevel == mip && loadedPage.coords == coords) // page already loaded with same coords
 						{
-							// std::cout << "VT Page request but page is already loaded : " << coords.first << ", " << coords.second << ")" << std::endl;
-							alreadyLoadedPage = true;
+							pageAlreadyLoaded = true;
 							break;
 						}
 					}
 
-					if (alreadyLoadedPage)
+					if (pageAlreadyLoaded)
 						continue;
+
+					requestedPages.insert(pageRequest);
+				}
+
+				int i = 0;
+				for (auto it = requestedPages.begin(); it != requestedPages.end(); ++it, ++i)
+				{
+					auto pageRequest = *it;
+					auto coords = pageRequest.requestedCoords;
+					auto mip = pageRequest.requestedMipMapLevel;
 
 					UINT tilesPerRow = m_VTMainMemoryTexture.width / vTexHeader.tileSize;
 					UINT maxPages = tilesPerRow * tilesPerRow; // 16 * 16 = 256 for 4096x4096 texture with 256x256 pages

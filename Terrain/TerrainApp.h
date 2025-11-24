@@ -66,8 +66,11 @@ private:
 		std::pair<int, int> coords; // virtual coords in the source texture VTex (in page space)
 		std::pair <UINT, UINT> physicalCoords; // physical coords in the gpu texture (in page/tile space, not pixel space)
 
-		bool operator<(const VTPage& other) const 
+		bool operator<(const VTPage& other) const
 		{
+			if (mipMapLevel != other.mipMapLevel)
+				return mipMapLevel < other.mipMapLevel;
+
 			return coords < other.coords;
 		}
 	};

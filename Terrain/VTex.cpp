@@ -160,7 +160,7 @@ void VTex::ConvertToVTex(const std::string & path, int tileSize)
 
 	std::vector<char> tileBuffer(tileDataSize);
 
-	const bool DEBUG_MIP_COLORS = true;
+	const bool DEBUG_MIP_COLORS = false;
 
 	for (int mip = 0; mip < mipCount; mip++)
 	{
