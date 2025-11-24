@@ -969,7 +969,7 @@ TerrainApp::TerrainApp()
 
 	// ------------------------------------------------ VT Textures ------------------------------------------------
 
-	int vtMainMemoryTextureSize = 4096; // TODO Demain fix vt_texture_size =/= texture and increase size
+	int vtMainMemoryTextureSize = 8192; // TODO for now we make it huge enough to store all mip levels at once, for debugging
 	int pagetableTextureSize = 4096 / 256;
 
 	m_VTMainMemoryTexture.CreateEmpty(
@@ -1061,6 +1061,7 @@ TerrainApp::TerrainApp()
 
 	m_constantBuffer.vt_texture_size = 4096;
 	m_constantBuffer.vt_texture_page_size = 256;
+	m_constantBuffer.vt_main_memory_texture_size = vtMainMemoryTextureSize;
 
 #if ENABLE_IMGUI
 
@@ -1353,11 +1354,12 @@ void TerrainApp::Run()
 				{
 					auto pageRequest = *it;
 					auto coords = pageRequest.requestedCoords;
+					auto mip = pageRequest.requestedMipMapLevel;
 
 					bool alreadyLoadedPage = false;
 					for (const auto& loadedPage : m_VTpagesRequestResult.loadedPages)
 					{
-						if (loadedPage.coords == coords) // page already loaded with same coords
+						if (loadedPage.mipMapLevel == mip && loadedPage.coords == coords) // page already loaded with same coords
 						{
 							// std::cout << "VT Page request but page is already loaded : " << coords.first << ", " << coords.second << ")" << std::endl;
 							alreadyLoadedPage = true;
@@ -1377,7 +1379,7 @@ void TerrainApp::Run()
 						m_VTpagesRequestResult.uploadHeaps[i]->Release();
 
 					std::vector<char> texTileData;
-					if (VTex::LoadTile(vtexPath, coords.first, coords.second, pageRequest.requestedMipMapLevel, texTileData))
+					if (VTex::LoadTile(vtexPath, coords.first, coords.second, mip, texTileData))
 					{
 						D3D12_RESOURCE_DESC textureDesc = {};
 						textureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -1456,7 +1458,7 @@ void TerrainApp::Run()
 						m_commandList->CopyTextureRegion(&dstLocation, tileX, tileY, 0, &srcLocation, &srcBox);
 
 						VTPage loadedVTPage;
-						loadedVTPage.mipMapLevel = pageRequest.requestedMipMapLevel;
+						loadedVTPage.mipMapLevel = mip;
 						loadedVTPage.coords = { coords.first, coords.second };
 						loadedVTPage.physicalCoords = { tileIndexX, tileIndexY }; // in page space, not in px space
 						m_VTpagesRequestResult.loadedPages.insert(loadedVTPage);

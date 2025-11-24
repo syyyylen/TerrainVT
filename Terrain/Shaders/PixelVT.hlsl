@@ -15,8 +15,10 @@ cbuffer ConstantBuffer : register(b0)
     float noise_height;
     int noise_octaves;
     int noise_runtime;
-    int vt_texture_size; // TODO Demain : we need both texture size & vt texture size
+    int vt_texture_size;
     int vt_texture_page_size;
+    int vt_main_memory_texture_size;
+    float3 padding;
 };
 
 float4 main(DSOutput input) : SV_TARGET

@@ -22,6 +22,8 @@ cbuffer ConstantBuffer : register(b0)
     int noise_runtime;
     int vt_texture_size;
     int vt_texture_page_size;
+    int vt_main_memory_texture_size;
+    float3 padding;
 };
 
 float4 main(DSOutput input) : SV_TARGET
@@ -40,7 +42,7 @@ float4 main(DSOutput input) : SV_TARGET
     float2 rqPx = floor(input.uv * vt_texture_size) / exp2(mip);
     float2 rqPage = floor(rqPx / vt_texture_page_size);
     float pagetableSize = (vt_texture_size / exp2(mip)) / vt_texture_page_size;
-    float2 rqPageUV = rqPage / (pagetableSize - 1);
+    float2 rqPageUV = rqPage / pagetableSize;
 
     float4 pagetableSample = vtPagetable.SampleLevel(s1, rqPageUV, mip);
     if (pagetableSample.a > 0.0f)
@@ -51,9 +53,9 @@ float4 main(DSOutput input) : SV_TARGET
         float2 rest = frac(rqPx / vt_texture_page_size);
         rest = rest * vt_texture_page_size;
 
-        float2 pxAdress = pageAdress + rest; // px physical adress
+        float2 pxAdress = pageAdress + rest; // px physical adress on main memory texture
 
-        float2 pxUVcoords = pxAdress / vt_texture_size; // back to 0-1 range
+        float2 pxUVcoords = pxAdress / vt_main_memory_texture_size; // back to 0-1 range
 
         float4 vTexColor = vtTexture.Sample(s1, pxUVcoords);
 

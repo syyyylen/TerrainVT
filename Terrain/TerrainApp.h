@@ -50,6 +50,8 @@ private:
 		int vt_texture_size;
 		int vt_texture_page_size;
 		// 16 bytes
+		int vt_main_memory_texture_size;
+		DirectX::XMFLOAT3 padding;
 	};
 
 	struct Vertex 
