@@ -969,7 +969,7 @@ TerrainApp::TerrainApp()
 
 	// ------------------------------------------------ VT Textures ------------------------------------------------
 
-	int vtMainMemoryTextureSize = 8192; // TODO for now we make it huge enough to store all mip levels at once, for debugging
+	int vtMainMemoryTextureSize = 4096;
 	int pagetableTextureSize = 4096 / 256;
 
 	m_VTMainMemoryTexture.CreateEmpty(
@@ -1370,6 +1370,15 @@ void TerrainApp::Run()
 					}
 				}*/
 
+				// Uploads from FRAMES_IN_FLIGHT ago have ended at this point, clear them
+				auto& frameUploadHeaps = m_VTpagesRequestResult.uploadHeaps.try_emplace(m_frameIndex).first->second;
+				for (auto uploadHeap : frameUploadHeaps) 
+				{
+					if (uploadHeap)
+						uploadHeap->Release();
+				}
+				frameUploadHeaps.clear();
+
 				std::set<VTPageRequest> requestedPages;
 				for (auto it = m_VTpagesRequestResult.requestedPages.begin(); it != m_VTpagesRequestResult.requestedPages.end(); ++it)
 				{
@@ -1393,20 +1402,11 @@ void TerrainApp::Run()
 					requestedPages.insert(pageRequest);
 				}
 
-				int i = 0;
-				for (auto it = requestedPages.begin(); it != requestedPages.end(); ++it, ++i)
+				for (auto it = requestedPages.begin(); it != requestedPages.end(); ++it)
 				{
 					auto pageRequest = *it;
 					auto coords = pageRequest.requestedCoords;
 					auto mip = pageRequest.requestedMipMapLevel;
-
-					UINT tilesPerRow = m_VTMainMemoryTexture.width / vTexHeader.tileSize;
-					UINT maxPages = tilesPerRow * tilesPerRow; // 16 * 16 = 256 for 4096x4096 texture with 256x256 pages
-					if (m_VTpagesRequestResult.loadedPages.size() >= maxPages) // TODO remove that and stream pages dynamically
-						continue;
-
-					if (i < 1000 && m_VTpagesRequestResult.uploadHeaps[i])
-						m_VTpagesRequestResult.uploadHeaps[i]->Release();
 
 					std::vector<char> texTileData;
 					if (VTex::LoadTile(vtexPath, coords.first, coords.second, mip, texTileData))
@@ -1438,7 +1438,7 @@ void TerrainApp::Run()
 							&uploadBufferDesc,
 							D3D12_RESOURCE_STATE_GENERIC_READ,
 							nullptr,
-							IID_PPV_ARGS(&m_VTpagesRequestResult.uploadHeaps[i]));
+							IID_PPV_ARGS(&uploadHeap));
 
 						D3D12_SUBRESOURCE_FOOTPRINT footprint = {};
 						footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -1448,18 +1448,33 @@ void TerrainApp::Run()
 						footprint.RowPitch = (vTexHeader.tileSize * 4 + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1)
 							& ~(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1);
 
-						UINT numLoadedTiles = static_cast<UINT>(m_VTpagesRequestResult.loadedPages.size());
 						UINT tilesPerRow = m_VTMainMemoryTexture.width / vTexHeader.tileSize;
 
-						UINT tileIndexX = numLoadedTiles % tilesPerRow;
-						UINT tileIndexY = numLoadedTiles / tilesPerRow;
+						UINT maxPages = tilesPerRow * tilesPerRow; // 16 * 16 = 256 for 4096x4096 texture with 256x256 pages
+						if (m_VTpagesRequestResult.lastLoadedPageIdx >= maxPages)
+						{
+							m_VTpagesRequestResult.lastLoadedPageIdx = 0; // go back to the first slot of main memory texture
+						}
+
+						UINT tileIndexX = m_VTpagesRequestResult.lastLoadedPageIdx % tilesPerRow;
+						UINT tileIndexY = m_VTpagesRequestResult.lastLoadedPageIdx / tilesPerRow;
+
+						// We are about to upload new data at this slot, let's remove previously loaded page at this slot
+						for (auto it = m_VTpagesRequestResult.loadedPages.begin(); it != m_VTpagesRequestResult.loadedPages.end(); ++it)
+						{
+							if (it->physicalCoords.first == tileIndexX && it->physicalCoords.second == tileIndexY) // Find the page that currently occupies this physical slot
+							{
+								m_VTpagesRequestResult.loadedPages.erase(it);
+								break;
+							}
+						}
 
 						UINT tileX = tileIndexX * vTexHeader.tileSize;
 						UINT tileY = tileIndexY * vTexHeader.tileSize;
 
 						UINT8* mappedData = nullptr;
 						CD3DX12_RANGE readRange(0, 0);
-						m_VTpagesRequestResult.uploadHeaps[i]->Map(0, &readRange, reinterpret_cast<void**>(&mappedData));
+						uploadHeap->Map(0, &readRange, reinterpret_cast<void**>(&mappedData));
 
 						const UINT srcRowPitch = vTexHeader.tileSize * 4;
 						const UINT8* srcData = reinterpret_cast<const UINT8*>(texTileData.data());
@@ -1471,10 +1486,10 @@ void TerrainApp::Run()
 								srcRowPitch);
 						}
 
-						m_VTpagesRequestResult.uploadHeaps[i]->Unmap(0, nullptr);
+						uploadHeap->Unmap(0, nullptr);
 
 						D3D12_TEXTURE_COPY_LOCATION srcLocation = {};
-						srcLocation.pResource = m_VTpagesRequestResult.uploadHeaps[i];
+						srcLocation.pResource = uploadHeap;
 						srcLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
 						srcLocation.PlacedFootprint.Footprint = footprint;
 
@@ -1491,7 +1506,11 @@ void TerrainApp::Run()
 						loadedVTPage.mipMapLevel = mip;
 						loadedVTPage.coords = { coords.first, coords.second };
 						loadedVTPage.physicalCoords = { tileIndexX, tileIndexY }; // in page space, not in px space
-						m_VTpagesRequestResult.loadedPages.insert(loadedVTPage);
+						m_VTpagesRequestResult.loadedPages.emplace_back(loadedVTPage);
+
+						m_VTpagesRequestResult.lastLoadedPageIdx++;
+
+						frameUploadHeaps.push_back(uploadHeap);
 					}
 				}
 
@@ -1759,24 +1778,19 @@ void TerrainApp::Run()
 		// readback from FRAMES_IN_FLIGHT frames ago (used m_frameIndex)
 		if (m_hasVTpageRequestPending[m_frameIndex])
 		{
-			UINT tilesPerRow = m_VTMainMemoryTexture.width / m_constantBuffer.vt_texture_page_size;
-			UINT maxPages = tilesPerRow * tilesPerRow;
-			if (m_VTpagesRequestResult.loadedPages.size() < maxPages) // TODO remove that and stream pages dynamically
+			if (m_buildVTResultFuture.valid() && m_buildVTResultFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+				m_buildVTResultFuture.get();
+
+			if (!m_buildVTResultInProgress.load(std::memory_order_acquire))
 			{
-				if (m_buildVTResultFuture.valid() && m_buildVTResultFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
-					m_buildVTResultFuture.get();
+				m_buildVTResultInProgress.store(true, std::memory_order_release);
 
-				if (!m_buildVTResultInProgress.load(std::memory_order_acquire))
+				int capturedFrameIndex = m_frameIndex;
+				m_buildVTResultFuture = std::async(std::launch::async, [this, capturedFrameIndex]
 				{
-					m_buildVTResultInProgress.store(true, std::memory_order_release);
-
-					int capturedFrameIndex = m_frameIndex;
-					m_buildVTResultFuture = std::async(std::launch::async, [this, capturedFrameIndex]
-					{
-							OPTICK_THREAD("Async VT Page Request Task");
-						BuildVTPageRequestResult(capturedFrameIndex);
-					});
-				}
+						OPTICK_THREAD("Async VT Page Request Task");
+					BuildVTPageRequestResult(capturedFrameIndex);
+				});
 			}
 
 			m_hasVTpageRequestPending[m_frameIndex] = false;

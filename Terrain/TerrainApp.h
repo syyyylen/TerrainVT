@@ -65,14 +65,6 @@ private:
 		int mipMapLevel;
 		std::pair<int, int> coords; // virtual coords in the source texture VTex (in page space)
 		std::pair <UINT, UINT> physicalCoords; // physical coords in the gpu texture (in page/tile space, not pixel space)
-
-		bool operator<(const VTPage& other) const
-		{
-			if (mipMapLevel != other.mipMapLevel)
-				return mipMapLevel < other.mipMapLevel;
-
-			return coords < other.coords;
-		}
 	};
 
 	struct VTPageRequest 
@@ -92,8 +84,10 @@ private:
 	struct VTPageRequestResult 
 	{
 		std::set<VTPageRequest> requestedPages;
-		ID3D12Resource* uploadHeaps[1000]; // TODO this is bad, just for debugging if it works
-		std::set<VTPage> loadedPages;
+		std::vector<VTPage> loadedPages;
+		int lastLoadedPageIdx;
+
+		std::map<int, std::vector<ID3D12Resource*>> uploadHeaps;
 		ID3D12Resource* pageTableUploadHeap;
 	};
 
