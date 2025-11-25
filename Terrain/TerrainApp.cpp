@@ -969,7 +969,7 @@ TerrainApp::TerrainApp()
 
 	// ------------------------------------------------ VT Textures ------------------------------------------------
 
-	int vtMainMemoryTextureSize = 4096;
+	int vtMainMemoryTextureSize = 2048;
 	int pagetableTextureSize = 4096 / 256;
 
 	m_VTMainMemoryTexture.CreateEmpty(
@@ -2248,8 +2248,11 @@ void TerrainApp::BuildVTPageRequestResult(int frameIndex)
 	UINT height = footprint.Footprint.Height;
 	UINT rowPitch = footprint.Footprint.RowPitch;
 
-	m_VTpagesRequestResult.requestedPages.clear();
+	const UINT tileSize = 256;
+	UINT tilesPerRow = m_VTMainMemoryTexture.width / tileSize;
+	UINT maxCachePages = tilesPerRow * tilesPerRow;
 
+	std::set<VTPageRequest> initialRequests;
 	for (UINT y = 0; y < height; ++y)
 	{
 		uint8_t* pRow = pByteData + (y * rowPitch);
@@ -2275,15 +2278,71 @@ void TerrainApp::BuildVTPageRequestResult(int frameIndex)
 				pageRequest.requestedCoords = { coordX, coordY };
 				pageRequest.requestedMipMapLevel = mip;
 
-				m_VTpagesRequestResult.requestedPages.insert(pageRequest);
+				initialRequests.insert(pageRequest);
+			}
+		}
+	}
+
+	// detect cache pressure and adjust mip levels
+	const float CACHE_PRESSURE_THRESHOLD = 0.6f; // start adjusting when 60% full
+	UINT requestedPageCount = (UINT)initialRequests.size();
+
+	m_VTpagesRequestResult.requestedPages.clear();
+
+	if (requestedPageCount > maxCachePages * CACHE_PRESSURE_THRESHOLD)
+	{
+		// mip level promotion, replace high-detail pages with lower-detail parents
+		std::map<int, std::set<VTPageRequest>> requestsByMip;
+		for (const auto& req : initialRequests)
+		{
+			requestsByMip[req.requestedMipMapLevel].insert(req);
+		}
+
+		int maxMipLevel = (int)std::floor(std::log2(m_constantBuffer.vt_texture_size / m_constantBuffer.vt_texture_page_size)); // get max mip level
+
+		// promote pages from highest detail (mip 0) upward until we fit in cache
+		std::set<VTPageRequest> adjustedRequests = initialRequests;
+		for (int mip = 0; mip <= maxMipLevel && adjustedRequests.size() > maxCachePages * CACHE_PRESSURE_THRESHOLD; ++mip)
+		{
+			if (requestsByMip.find(mip) == requestsByMip.end())
+				continue;
+
+			std::set<VTPageRequest> promotedPages;
+			for (const auto& page : requestsByMip[mip])
+			{
+				int parentMip = mip + 1; // calculate parent page at mip+1 (covers 4x the area)
+				if (parentMip > maxMipLevel)
+					continue; // can't promote further
+
+				int parentX = page.requestedCoords.first / 2;
+				int parentY = page.requestedCoords.second / 2;
+
+				VTPageRequest parentRequest;
+				parentRequest.requestedCoords = { parentX, parentY };
+				parentRequest.requestedMipMapLevel = parentMip;
+
+				adjustedRequests.erase(page); // remove this high-detail page
+				promotedPages.insert(parentRequest); // add parent page (1 parent can replace up to 4 children)
 			}
 
-			/*std::cout << "VT Page Request : "
-				<< "R: " << static_cast<int>(r) << " "
-				<< "G: " << static_cast<int>(g) << " "
-				<< "B: " << static_cast<int>(b) << " "
-				<< "A: " << static_cast<int>(a) << std::endl;*/
+			for (const auto& promoted : promotedPages) // add all promoted pages
+			{
+				adjustedRequests.insert(promoted); 
+			}
 		}
+
+		m_VTpagesRequestResult.requestedPages = adjustedRequests;
+
+		/*static int debugCounter = 0;
+		if (debugCounter++ % 60 == 0)
+		{
+			std::cout << "[Cache Pressure] Reduced " << initialRequests.size()
+			          << " -> " << adjustedRequests.size() << " pages (max: " << maxCachePages << ")" << std::endl;
+		}*/
+	}
+	else
+	{
+		m_VTpagesRequestResult.requestedPages = initialRequests; // no cache pressure, use original requests
 	}
 
 	D3D12_RANGE writeRange = { 0, 0 };
