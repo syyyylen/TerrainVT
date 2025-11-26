@@ -27,10 +27,24 @@ cbuffer ConstantBuffer : register(b0)
     float2 padding;
 };
 
+#define NORMALS 0
+
 float4 main(DSOutput input) : SV_TARGET
 {
     float3 finalColor = float3(0.0f, 0.0f, 0.0f);
+    
+#if NORMALS
 
+    float3 lightDir = normalize(float3(0.2f, 1.0f, 0.3f));
+    float3 normal = normalize(input.normal);
+    float ndotl = saturate(dot(normal, lightDir));
+    float ambient = 0.25f;
+    float lighting = ambient + ndotl * (1.0f - ambient);
+    
+#else
+    float lighting = 1.0f;
+#endif
+    
     float2 uv = input.uv * vt_texture_tiling;
     
     float2 dx = ddx(uv * vt_texture_size);
@@ -65,7 +79,7 @@ float4 main(DSOutput input) : SV_TARGET
             float4 vTexColor = vtTexture.Sample(s1, pxUVcoords);
             if (vTexColor.a > 0.0f)
             {
-                finalColor = vTexColor.rgb;
+                finalColor = vTexColor.rgb * lighting;
                 break;
             }
         }

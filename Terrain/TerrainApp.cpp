@@ -2134,6 +2134,7 @@ void TerrainApp::BakeHeightMap()
 		m_computeOutputTexture.resource,
 		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
 		D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	m_commandList->ResourceBarrier(1, &srvToUavBarrier);
 
 	m_commandList->SetPipelineState(m_computePipelineState);
 	m_commandList->SetComputeRootSignature(m_computeRootSignature);
@@ -2177,7 +2178,7 @@ void TerrainApp::BakeHeightMap()
 
 	CD3DX12_RESOURCE_BARRIER bakedTexturesToCopyDestBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
 		m_bakedHeightmapTexture.resource,
-		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+		D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE,
 		D3D12_RESOURCE_STATE_COPY_DEST);
 	m_commandList->ResourceBarrier(1, &bakedTexturesToCopyDestBarrier);
 
@@ -2191,7 +2192,7 @@ void TerrainApp::BakeHeightMap()
 	allTexturesToSrvBarriers[1] = CD3DX12_RESOURCE_BARRIER::Transition(
 		m_bakedHeightmapTexture.resource,
 		D3D12_RESOURCE_STATE_COPY_DEST,
-		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+		D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE);
 	m_commandList->ResourceBarrier(2, allTexturesToSrvBarriers);
 
 	m_saveHeightmapAfterFrame = true;
@@ -2212,9 +2213,19 @@ void TerrainApp::SaveHeightmapToPNG(const std::string& filepath)
 	float* floatData = static_cast<float*>(pData);
 	std::vector<unsigned char> imageData(1080 * 1080);
 
+	float minVal = floatData[0];
+	float maxVal = floatData[0];
+	for (int i = 1; i < 1080 * 1080; i++)
+	{
+		minVal = std::min(minVal, floatData[i]);
+		maxVal = std::max(maxVal, floatData[i]);
+	}
+
+	float range = maxVal - minVal;
+	if (range < 0.0001f) range = 1.0f;
 	for (int i = 0; i < 1080 * 1080; i++)
 	{
-		float normalized = std::clamp(floatData[i], 0.0f, 1.0f);
+		float normalized = (floatData[i] - minVal) / range;
 		imageData[i] = static_cast<unsigned char>(normalized * 255.0f);
 	}
 

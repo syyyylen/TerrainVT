@@ -40,6 +40,7 @@ Texture2D heightMap : register(t1);
 SamplerState samplerState : register(s0);
 
 #define HEIGHT_MODIF 1
+#define NORMALS 0
 
 [domain("tri")]
 DSOutput main(HSConstantOutput input, float3 bary : SV_DomainLocation, const OutputPatch<HSOutput, 3> patch)
@@ -71,7 +72,38 @@ DSOutput main(HSConstantOutput input, float3 bary : SV_DomainLocation, const Out
     
     output.worldPos = pos;
     output.pos = mul(float4(pos, 1.0f), viewProj);
+    
+#if NORMALS
+
+    float delta = 0.01f;
+    float heightL, heightR, heightD, heightU;
+
+    if (noise_runtime)
+    {
+        float scale = noise_scale;
+        heightL = fbm((output.uv.x - delta) * scale, output.uv.y * scale, noise_octaves, noise_persistence, noise_lacunarity) * noise_height;
+        heightR = fbm((output.uv.x + delta) * scale, output.uv.y * scale, noise_octaves, noise_persistence, noise_lacunarity) * noise_height;
+        heightD = fbm(output.uv.x * scale, (output.uv.y - delta) * scale, noise_octaves, noise_persistence, noise_lacunarity) * noise_height;
+        heightU = fbm(output.uv.x * scale, (output.uv.y + delta) * scale, noise_octaves, noise_persistence, noise_lacunarity) * noise_height;
+    }
+    else
+    {
+        heightL = heightMap.SampleLevel(samplerState, float2(output.uv.x - delta, output.uv.y), 0).r * noise_height;
+        heightR = heightMap.SampleLevel(samplerState, float2(output.uv.x + delta, output.uv.y), 0).r * noise_height;
+        heightD = heightMap.SampleLevel(samplerState, float2(output.uv.x, output.uv.y - delta), 0).r * noise_height;
+        heightU = heightMap.SampleLevel(samplerState, float2(output.uv.x, output.uv.y + delta), 0).r * noise_height;
+    }
+
+    float3 tangentX = float3(delta * 2.0f, heightR - heightL, 0.0f);
+    float3 tangentZ = float3(0.0f, heightU - heightD, delta * 2.0f);
+
+    output.normal = normalize(cross(tangentZ, tangentX));
+    
+#else
+    
     output.normal = float3(0.0f, 1.0f, 0.0f);
     
+#endif
+
     return output;
 }
