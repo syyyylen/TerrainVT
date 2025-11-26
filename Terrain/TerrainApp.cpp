@@ -481,9 +481,9 @@ TerrainApp::TerrainApp()
 
 	D3D12_STATIC_SAMPLER_DESC sampler = {};
 	sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
-	sampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-	sampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-	sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+	sampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	sampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
 	sampler.MipLODBias = 0;
 	sampler.MaxAnisotropy = 0;
 	sampler.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
@@ -967,10 +967,35 @@ TerrainApp::TerrainApp()
 		m_VTpagesRequestReadBackBuffer[i]->SetName(bufferName.c_str());
 	}
 
+	// ------------------------------------------------ VTex Creation ------------------------------------------------
+
+	std::string vtexPath = "Assets/" + m_terrainTextureName + ".vtex";
+
+	auto ConvertTexToVTex = [this]() {
+		OPTICK_EVENT("Convert Tex to VTex");
+
+		VTex::ConvertToVTex("Assets/" + m_terrainTextureName + ".png", m_vtPageSize);
+		VTex::ConvertToVTex("../../../../Terrain/Assets/" + m_terrainTextureName + ".png", m_vtPageSize);
+	};
+
+	VTexHeader vtexHeader;
+	if (!VTex::LoadHeader(vtexPath, vtexHeader))
+	{
+		ConvertTexToVTex();
+	}
+
+	int vtTextureSize = 4096;
+	if (VTex::LoadHeader(vtexPath, vtexHeader))
+	{
+		vtTextureSize = vtexHeader.width;
+		if (vtexHeader.tileSize != m_vtPageSize) 
+			ConvertTexToVTex();
+	}
+
 	// ------------------------------------------------ VT Textures ------------------------------------------------
 
-	int vtMainMemoryTextureSize = 2048;
-	int pagetableTextureSize = 4096 / 256;
+	int vtMainMemoryTextureSize = m_vtMemoryBudget;
+	int pagetableTextureSize = vtTextureSize / m_vtPageSize;
 
 	m_VTMainMemoryTexture.CreateEmpty(
 		m_device,
@@ -1055,13 +1080,14 @@ TerrainApp::TerrainApp()
 	m_constantBuffer.noise_persistence = 0.38f;
 	m_constantBuffer.noise_lacunarity = 2.6f;
 	m_constantBuffer.noise_scale = 3.0f;
-	m_constantBuffer.noise_height = 110.0f;
+	m_constantBuffer.noise_height = 140.0f;
 	m_constantBuffer.noise_octaves = 5;
 	m_constantBuffer.runtime_noise = m_runtimeNoiseAtStart;
 
-	m_constantBuffer.vt_texture_size = 4096;
-	m_constantBuffer.vt_texture_page_size = 256;
+	m_constantBuffer.vt_texture_size = vtTextureSize;
+	m_constantBuffer.vt_texture_page_size = m_vtPageSize;
 	m_constantBuffer.vt_main_memory_texture_size = vtMainMemoryTextureSize;
+	m_constantBuffer.vt_texture_tiling = 1.8f;
 
 #if ENABLE_IMGUI
 
@@ -1338,7 +1364,7 @@ void TerrainApp::Run()
 		{
 			OPTICK_EVENT("Load VT Pages In VRAM");
 
-			std::string vtexPath = "Assets/rocks_albedo.vtex";
+			std::string vtexPath = "Assets/" + m_terrainTextureName + ".vtex";
 
 			VTexHeader vTexHeader;
 			if (VTex::LoadHeader(vtexPath, vTexHeader))
@@ -1609,81 +1635,68 @@ void TerrainApp::Run()
 
 		// ------------------------------------------------ ImGui Commands ------------------------------------------------
 
+		UINT descriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
 		ImGui_ImplDX12_NewFrame();
 		ImGui_ImplWin32_NewFrame();
 		ImGui::NewFrame();
 
-		ImGui::Begin("FrameRate");
-		ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-		ImGui::SliderFloat("Move Speed", &m_cameraMoveSpeed, 1.0f, 400.0f);
-		ImGui::Text("Pre-tesselation Vertex Count: %d", m_vertexCount);
-		const int tessFactor = 64;
-		int baseTriangles = m_vertexCount / 3;
-		int tessVertexCount = baseTriangles * ((tessFactor + 1) * (tessFactor + 2) / 2);
-		ImGui::Text("Tessellated Vertex Count: %d", tessVertexCount);
-		bool runtime_noise = m_constantBuffer.runtime_noise;
-		ImGui::Checkbox("Runtime Perlin Noise", &runtime_noise);
-		m_constantBuffer.runtime_noise = runtime_noise;
-		ImGui::End();
-
-		UINT descriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-
-		ImGui::Begin("Render To Texture");
-
-		CD3DX12_GPU_DESCRIPTOR_HANDLE rtSrvGpuHandle(
-			m_mainDescriptorHeap[0]->GetGPUDescriptorHandleForHeapStart(),
-			6, // Render Texture SRV
-			descriptorSize);
-
-		ImGui::Image((ImTextureID)rtSrvGpuHandle.ptr, ImVec2(m_width / 2, m_height / 2));
-
-		ImGui::End();
-
-		ImGui::Begin("VT Main Memory Texture");
-
-		CD3DX12_GPU_DESCRIPTOR_HANDLE VTSrvGpuHandle(
-			m_mainDescriptorHeap[0]->GetGPUDescriptorHandleForHeapStart(),
-			3, // VT Main Memory Texture SRV
-			descriptorSize);
-
-		if (ImGui::Button("Clear Loaded Pages"))
 		{
-			m_VTpagesRequestResult.loadedPages.clear();
+			ImGui::Begin("FrameRate");
+			ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+			ImGui::SliderFloat("Move Speed", &m_cameraMoveSpeed, 1.0f, 400.0f);
+			ImGui::Text("Pre-tesselation Vertex Count: %d", m_vertexCount);
+			const int tessFactor = 64;
+			int baseTriangles = m_vertexCount / 3;
+			int tessVertexCount = baseTriangles * ((tessFactor + 1) * (tessFactor + 2) / 2);
+			ImGui::Text("Tessellated Vertex Count: %d", tessVertexCount);
+			bool runtime_noise = m_constantBuffer.runtime_noise;
+			ImGui::Checkbox("Runtime Perlin Noise", &runtime_noise);
+			m_constantBuffer.runtime_noise = runtime_noise;
+			ImGui::SliderFloat("VT Texture Tiling", &m_constantBuffer.vt_texture_tiling, 1.0f, 10.0f);
+			ImGui::End();
 		}
 
-		ImGui::Text("Main Memory Texture : ");
-		ImGui::Image((ImTextureID)VTSrvGpuHandle.ptr, ImVec2(320, 320));
-
-		CD3DX12_GPU_DESCRIPTOR_HANDLE VTPageTablesrvGpuHandle(
-			m_mainDescriptorHeap[0]->GetGPUDescriptorHandleForHeapStart(),
-			4, // VT Pagetable Texture SRV
-			descriptorSize);
-
-		ImGui::Separator();
-
-		ImGui::Text("Pagetable Texture : ");
-		ImGui::Image((ImTextureID)VTPageTablesrvGpuHandle.ptr, ImVec2(320, 320));
-
-		ImGui::End();
-
-		ImGui::Begin("VTex Converter");
-		if (ImGui::Button("Convert Tex to VTex"))
 		{
-			OPTICK_EVENT("Convert Tex to VTex");
+			ImGui::Begin("Render To Texture");
 
-			VTex::ConvertToVTex("Assets/rocks_albedo.png", 256);
-			VTex::ConvertToVTex("../../../../Terrain/Assets/rocks_albedo.png", 256);
+			CD3DX12_GPU_DESCRIPTOR_HANDLE rtSrvGpuHandle(
+				m_mainDescriptorHeap[0]->GetGPUDescriptorHandleForHeapStart(),
+				6, // Render Texture SRV
+				descriptorSize);
+
+			ImGui::Image((ImTextureID)rtSrvGpuHandle.ptr, ImVec2(m_width / 2, m_height / 2));
+
+			ImGui::End();
 		}
-
-		if (ImGui::Button("Test read VTex"))
+		
 		{
-			VTexHeader vTexHeader;
-			VTex::LoadHeader("Assets/rocks_albedo.vtex", vTexHeader);
+			ImGui::Begin("VT Main Memory Texture");
 
-			std::cout << "Loaded VTex : " << vTexHeader.height << " height, " << vTexHeader.width << " width, " << vTexHeader.bytesPerPixel << " bytes per pixel" << std::endl;
+			CD3DX12_GPU_DESCRIPTOR_HANDLE VTSrvGpuHandle(
+				m_mainDescriptorHeap[0]->GetGPUDescriptorHandleForHeapStart(),
+				3, // VT Main Memory Texture SRV
+				descriptorSize);
+
+			if (ImGui::Button("Clear Loaded Pages"))
+			{
+				m_VTpagesRequestResult.loadedPages.clear();
+			}
+
+			ImGui::Text("Main Memory Texture : ");
+			ImGui::Image((ImTextureID)VTSrvGpuHandle.ptr, ImVec2(320, 320));
+
+			CD3DX12_GPU_DESCRIPTOR_HANDLE VTPageTablesrvGpuHandle(
+				m_mainDescriptorHeap[0]->GetGPUDescriptorHandleForHeapStart(),
+				4, // VT Pagetable Texture SRV
+				descriptorSize);
+
+			ImGui::Separator();
+
+			ImGui::Text("Pagetable Texture : ");
+			ImGui::Image((ImTextureID)VTPageTablesrvGpuHandle.ptr, ImVec2(320, 320));
+			ImGui::End();
 		}
-
-		ImGui::End();
 
 		if (m_constantBuffer.runtime_noise) 
 		{
@@ -2248,7 +2261,7 @@ void TerrainApp::BuildVTPageRequestResult(int frameIndex)
 	UINT height = footprint.Footprint.Height;
 	UINT rowPitch = footprint.Footprint.RowPitch;
 
-	const UINT tileSize = 256;
+	const UINT tileSize = m_vtPageSize;
 	UINT tilesPerRow = m_VTMainMemoryTexture.width / tileSize;
 	UINT maxCachePages = tilesPerRow * tilesPerRow;
 

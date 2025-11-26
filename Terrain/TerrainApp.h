@@ -51,7 +51,8 @@ private:
 		int vt_texture_page_size;
 		// 16 bytes
 		int vt_main_memory_texture_size;
-		DirectX::XMFLOAT3 padding;
+		float vt_texture_tiling;
+		DirectX::XMFLOAT2 padding;
 	};
 
 	struct Vertex 
@@ -119,7 +120,8 @@ private:
 
 	bool m_drawWireframe = false;
 	bool m_maximizeAtStart = false;
-	bool m_runtimeNoiseAtStart = false;
+	bool m_runtimeNoiseAtStart = true;
+	std::string m_terrainTextureName = "rocks_albedo";
 
 	HWND m_hwnd = nullptr;
 	int m_width = 1920;
@@ -183,6 +185,8 @@ private:
 	ID3D12GraphicsCommandList* m_copyCommandList;*/
 
 	// VT
+	int m_vtMemoryBudget = 4096;
+	int m_vtPageSize = 256;
 	ID3D12PipelineState* m_renderToTexturePSO = nullptr;
 	ID3D12Resource* m_VTpagesRequestReadBackBuffer[FRAMES_IN_FLIGHT] = {};
 	VTPageRequestResult m_VTpagesRequestResult = {};

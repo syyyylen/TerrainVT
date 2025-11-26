@@ -12,7 +12,8 @@ cbuffer ConstantBuffer : register(b0)
     int vt_texture_size;
     int vt_texture_page_size;
     int vt_main_memory_texture_size;
-    float3 padding;
+    float vt_texture_tiling;
+    float2 padding;
 };
 
 RWTexture2D<float> OutHeightMap : register(u0);

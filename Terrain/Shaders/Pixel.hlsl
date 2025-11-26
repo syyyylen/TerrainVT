@@ -23,15 +23,18 @@ cbuffer ConstantBuffer : register(b0)
     int vt_texture_size;
     int vt_texture_page_size;
     int vt_main_memory_texture_size;
-    float3 padding;
+    float vt_texture_tiling;
+    float2 padding;
 };
 
 float4 main(DSOutput input) : SV_TARGET
 {
     float3 finalColor = float3(0.0f, 0.0f, 0.0f);
 
-    float2 dx = ddx(input.uv * vt_texture_size);
-    float2 dy = ddy(input.uv * vt_texture_size);
+    float2 uv = input.uv * vt_texture_tiling;
+    
+    float2 dx = ddx(uv * vt_texture_size);
+    float2 dy = ddy(uv * vt_texture_size);
     float d = max(dot(dx, dx), dot(dy, dy));
     float mip = 0.5f * log2(d);
 
@@ -41,7 +44,7 @@ float4 main(DSOutput input) : SV_TARGET
     
     for (int i = mip; i <= maxMipLevel; i++) // if we don't find anything in the pagetable at mip N, we continue with mip N+1 etc...
     {
-        float2 rqPx = floor(input.uv * vt_texture_size) / exp2(i);
+        float2 rqPx = floor(uv * vt_texture_size) / exp2(i);
         float2 rqPage = floor(rqPx / vt_texture_page_size);
         float pagetableSize = (vt_texture_size / exp2(i)) / vt_texture_page_size;
         float2 rqPageUV = rqPage / pagetableSize;
