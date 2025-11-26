@@ -1659,14 +1659,14 @@ void TerrainApp::Run()
 		}
 
 		{
-			ImGui::Begin("Render To Texture");
+			ImGui::Begin("Pages Requests Render Texture");
 
 			CD3DX12_GPU_DESCRIPTOR_HANDLE rtSrvGpuHandle(
 				m_mainDescriptorHeap[0]->GetGPUDescriptorHandleForHeapStart(),
 				6, // Render Texture SRV
 				descriptorSize);
 
-			ImGui::Image((ImTextureID)rtSrvGpuHandle.ptr, ImVec2(m_width / 2, m_height / 2));
+			ImGui::Image((ImTextureID)rtSrvGpuHandle.ptr, ImVec2(m_width / 4, m_height / 4));
 
 			ImGui::End();
 		}
