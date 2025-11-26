@@ -4,6 +4,8 @@ struct DSOutput
     float2 uv : TEXCOORD0;
     float3 normal : NORMAL;
     float3 worldPos : TEXCOORD1;
+    float3 tangent : TANGENT;
+    float3 bitangent : BITANGENT;
 };
 
 cbuffer ConstantBuffer : register(b0)

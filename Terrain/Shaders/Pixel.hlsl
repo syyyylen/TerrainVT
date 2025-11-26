@@ -4,11 +4,13 @@ struct DSOutput
     float2 uv : TEXCOORD0;
     float3 normal : NORMAL;
     float3 worldPos : TEXCOORD1;
+    float3 tangent : TANGENT;
+    float3 bitangent : BITANGENT;
 };
 
-Texture2D diffuseTexture : register(t0);
-Texture2D vtTexture : register(t2);
-Texture2D vtPagetable : register(t3);
+Texture2D vtTexture : register(t1);
+Texture2D vtPagetable : register(t2);
+Texture2D normalMapTexture : register(t3);
 SamplerState s1 : register(s0);
 
 cbuffer ConstantBuffer : register(b0)
@@ -36,16 +38,25 @@ float4 main(DSOutput input) : SV_TARGET
 #if NORMALS
 
     float3 lightDir = normalize(float3(1.0f, 0.6f, 0.2f));
-    float3 normal = normalize(input.normal);
-    float ndotl = saturate(dot(normal, lightDir));
+
+    float3 T = normalize(input.tangent);
+    float3 B = normalize(input.bitangent);
+    float3 N = normalize(input.normal);
+
+    float2 normalUV = input.uv * vt_texture_tiling;
+    float3 normal = normalMapTexture.Sample(s1, normalUV).rgb * 2.0f - 1.0f;
+    
+    float3x3 TBN = float3x3(T, B, N);
+    float3 wsNormal = mul(normal, TBN);
+    wsNormal = normalize(wsNormal);
+
+    float ndotl = saturate(dot(wsNormal, lightDir));
     float ambient = 0.2f;
     float lighting = ambient + ndotl * (1.0f - ambient);
-    
+
 #else
     float lighting = 1.0f;
 #endif
-    
-    // return float4(lighting, lighting, lighting, 1.0f);
     
     float2 uv = input.uv * vt_texture_tiling;
     

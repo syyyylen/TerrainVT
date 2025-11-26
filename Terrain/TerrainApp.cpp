@@ -836,20 +836,22 @@ TerrainApp::TerrainApp()
 	CD3DX12_RESOURCE_BARRIER indexToReadBarrier = CD3DX12_RESOURCE_BARRIER::Transition(m_indexBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_INDEX_BUFFER);
 	m_commandList->ResourceBarrier(1, &indexToReadBarrier);
 
-	// ------------------------------------------------ Terrain Test Texture ------------------------------------------------
-
-	m_albedoTexture.LoadFromFile(m_device, m_commandList, "Assets/rocks_albedo.png");
+	// ------------------------------------------------ Texture Descriptors ------------------------------------------------
 
 	UINT descriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
+	// ------------------------------------------------ Normal Map Texture ------------------------------------------------
+
+	m_normalMapTexture.LoadFromFile(m_device, m_commandList, "Assets/rocks_normal.png");
+
 	for (int i = 0; i < FRAMES_IN_FLIGHT; ++i)
 	{
-		CD3DX12_CPU_DESCRIPTOR_HANDLE srvHandle(
+		CD3DX12_CPU_DESCRIPTOR_HANDLE normalSrvHandle(
 			m_mainDescriptorHeap[i]->GetCPUDescriptorHandleForHeapStart(),
-			1, // Albedo Texture (t0)
+			4, // Normal Map Texture (t3)
 			descriptorSize);
 
-		m_albedoTexture.CreateSRV(m_device, srvHandle);
+		m_normalMapTexture.CreateSRV(m_device, normalSrvHandle);
 	}
 
 	// ------------------------------------------------ Baked Heightmap Loading ------------------------------------------------
@@ -860,7 +862,7 @@ TerrainApp::TerrainApp()
 	{
 		CD3DX12_CPU_DESCRIPTOR_HANDLE bakedHeightmapSrvHandle(
 			m_mainDescriptorHeap[i]->GetCPUDescriptorHandleForHeapStart(),
-			2, // Baked Heightmap (t1)
+			1, // Baked Heightmap (t0)
 			descriptorSize);
 
 		m_bakedHeightmapTexture.CreateSRV(m_device, bakedHeightmapSrvHandle);
@@ -1020,14 +1022,14 @@ TerrainApp::TerrainApp()
 	{
 		CD3DX12_CPU_DESCRIPTOR_HANDLE mainMemoryTextureSrvHandle(
 			m_mainDescriptorHeap[i]->GetCPUDescriptorHandleForHeapStart(),
-			3, // VT Main Memory Texture (t2)
+			2, // VT Main Memory Texture (t1)
 			descriptorSize);
 
 		m_VTMainMemoryTexture.CreateSRV(m_device, mainMemoryTextureSrvHandle);
 
 		CD3DX12_CPU_DESCRIPTOR_HANDLE pagetableTextureSrvHandle(
 			m_mainDescriptorHeap[i]->GetCPUDescriptorHandleForHeapStart(),
-			4, // VT Page Table Texture (t3)
+			3, // VT Page Table Texture (t2)
 			descriptorSize);
 
 		m_VTPageTableTexture.CreateSRV(m_device, pagetableTextureSrvHandle);
@@ -1087,7 +1089,7 @@ TerrainApp::TerrainApp()
 	m_constantBuffer.vt_texture_size = vtTextureSize;
 	m_constantBuffer.vt_texture_page_size = m_vtPageSize;
 	m_constantBuffer.vt_main_memory_texture_size = vtMainMemoryTextureSize;
-	m_constantBuffer.vt_texture_tiling = 1.8f;
+	m_constantBuffer.vt_texture_tiling = 1.4f;
 
 #if ENABLE_IMGUI
 
@@ -1180,7 +1182,7 @@ TerrainApp::~TerrainApp()
 			m_VTpagesRequestReadBackBuffer[i]->Release();
 	};
 
-	m_albedoTexture.Release();
+	m_normalMapTexture.Release();
 	m_computeOutputTexture.Release();
 	m_bakedHeightmapTexture.Release();
 	m_renderTexture.Release();
@@ -1653,7 +1655,6 @@ void TerrainApp::Run()
 			bool runtime_noise = m_constantBuffer.runtime_noise;
 			ImGui::Checkbox("Runtime Perlin Noise", &runtime_noise);
 			m_constantBuffer.runtime_noise = runtime_noise;
-			ImGui::SliderFloat("VT Texture Tiling", &m_constantBuffer.vt_texture_tiling, 1.0f, 10.0f);
 			ImGui::End();
 		}
 
@@ -1669,13 +1670,16 @@ void TerrainApp::Run()
 
 			ImGui::End();
 		}
-		
+
 		{
-			ImGui::Begin("VT Main Memory Texture");
+			ImGui::Begin("Virtual Texure");
+
+			ImGui::Text("GPU Memory for VT : %d", m_vtMemoryBudget);
+			ImGui::SliderFloat("VT Texture Tiling", &m_constantBuffer.vt_texture_tiling, 1.0f, 10.0f);
 
 			CD3DX12_GPU_DESCRIPTOR_HANDLE VTSrvGpuHandle(
 				m_mainDescriptorHeap[0]->GetGPUDescriptorHandleForHeapStart(),
-				3, // VT Main Memory Texture SRV
+				2, // VT Main Memory Texture SRV
 				descriptorSize);
 
 			if (ImGui::Button("Clear Loaded Pages"))
@@ -1688,7 +1692,7 @@ void TerrainApp::Run()
 
 			CD3DX12_GPU_DESCRIPTOR_HANDLE VTPageTablesrvGpuHandle(
 				m_mainDescriptorHeap[0]->GetGPUDescriptorHandleForHeapStart(),
-				4, // VT Pagetable Texture SRV
+				3, // VT Pagetable Texture SRV
 				descriptorSize);
 
 			ImGui::Separator();

@@ -18,6 +18,8 @@ struct DSOutput
     float2 uv : TEXCOORD0;
     float3 normal : NORMAL;
     float3 worldPos : TEXCOORD1;
+    float3 tangent : TANGENT;
+    float3 bitangent : BITANGENT;
 };
 
 cbuffer ConstantBuffer : register(b0)
@@ -36,7 +38,7 @@ cbuffer ConstantBuffer : register(b0)
     float2 padding;
 };
 
-Texture2D heightMap : register(t1);
+Texture2D heightMap : register(t0);
 SamplerState samplerState : register(s0);
 
 #define HEIGHT_MODIF 1
@@ -99,11 +101,15 @@ DSOutput main(HSConstantOutput input, float3 bary : SV_DomainLocation, const Out
     float3 tangentZ = float3(0.0f, heightU - heightD, worldDelta * 2.0f);
 
     output.normal = normalize(cross(tangentZ, tangentX));
-    
+    output.tangent = normalize(tangentX);
+    output.bitangent = normalize(tangentZ);
+
 #else
-    
+
     output.normal = float3(0.0f, 1.0f, 0.0f);
-    
+    output.tangent = float3(1.0f, 0.0f, 0.0f);
+    output.bitangent = float3(0.0f, 0.0f, 1.0f);
+
 #endif
 
     return output;
