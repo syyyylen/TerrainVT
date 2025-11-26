@@ -27,7 +27,7 @@ cbuffer ConstantBuffer : register(b0)
     float2 padding;
 };
 
-#define NORMALS 0
+#define NORMALS 1
 
 float4 main(DSOutput input) : SV_TARGET
 {
@@ -35,15 +35,17 @@ float4 main(DSOutput input) : SV_TARGET
     
 #if NORMALS
 
-    float3 lightDir = normalize(float3(0.2f, 1.0f, 0.3f));
+    float3 lightDir = normalize(float3(1.0f, 0.6f, 0.2f));
     float3 normal = normalize(input.normal);
     float ndotl = saturate(dot(normal, lightDir));
-    float ambient = 0.25f;
+    float ambient = 0.2f;
     float lighting = ambient + ndotl * (1.0f - ambient);
     
 #else
     float lighting = 1.0f;
 #endif
+    
+    // return float4(lighting, lighting, lighting, 1.0f);
     
     float2 uv = input.uv * vt_texture_tiling;
     

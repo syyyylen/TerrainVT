@@ -40,7 +40,7 @@ Texture2D heightMap : register(t1);
 SamplerState samplerState : register(s0);
 
 #define HEIGHT_MODIF 1
-#define NORMALS 0
+#define NORMALS 1
 
 [domain("tri")]
 DSOutput main(HSConstantOutput input, float3 bary : SV_DomainLocation, const OutputPatch<HSOutput, 3> patch)
@@ -94,8 +94,9 @@ DSOutput main(HSConstantOutput input, float3 bary : SV_DomainLocation, const Out
         heightU = heightMap.SampleLevel(samplerState, float2(output.uv.x, output.uv.y + delta), 0).r * noise_height;
     }
 
-    float3 tangentX = float3(delta * 2.0f, heightR - heightL, 0.0f);
-    float3 tangentZ = float3(0.0f, heightU - heightD, delta * 2.0f);
+    float worldDelta = delta * 1000.0f; // convert UV delta to world space delta (terrain is 1000 units wide, UVs go 0-1), 0.01f * 1000 = 10.0f
+    float3 tangentX = float3(worldDelta * 2.0f, heightR - heightL, 0.0f);
+    float3 tangentZ = float3(0.0f, heightU - heightD, worldDelta * 2.0f);
 
     output.normal = normalize(cross(tangentZ, tangentX));
     
